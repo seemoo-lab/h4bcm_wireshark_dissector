@@ -31,7 +31,20 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <stdio.h> //TODO remove after debugging
+
+
+/* type definitions for Broadcom diagnostics */
+#define DIA_LM_SENT			0x00
+#define DIA_LM_RECV			0x01
+#define DIA_ACL_BR			0x16
+#define DIA_ACL_EDR			0x17
+#define DIA_LE_SENT			0x80
+#define DIA_LE_RECV			0x81
+#define DIA_ACL_BR_RESET		0xb9
+#define DIA_ACL_BR_GET			0xc1
+#define DIA_ACL_EDR_GET			0xc2
+#define DIA_LM_ENABLE			0xf0
+
 
 /* function prototypes */
 void proto_reg_handoff_h4bcm(void);
@@ -39,23 +52,54 @@ void proto_reg_handoff_h4bcm(void);
 /* initialize the protocol and registered fields */
 static int proto_h4bcm = -1;
 static int hf_h4bcm_type = -1;
-
-/* field values */
-// static const true_false_string direction = {
-// 	"Slave to Master",
-// 	"Master to Slave"
-// };
-
+static int hf_h4bcm_lmp = -1;
+static int hf_h4bcm_clock = -1;
+static int hf_h4bcm_maclow = -1;
+static int hf_h4bcm_payload = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
 static gint ett_h4bcm_type = -1;
+static gint ett_h4bcm_lmp = -1;
 
 /* subdissectors */
-static dissector_handle_t btbrlmp_handle = NULL; //TODO we might also be able to use this one ourselves :)
+static dissector_handle_t btbrlmp_handle = NULL; //TODO lmp handover
 
+/* reversed Broadcom diagnostic types */
+static const value_string h4bcm_types[] = {
+	{ DIA_LM_SENT, "LM Sent" },
+	{ DIA_LM_RECV, "LM Received" },
+	{ DIA_ACL_BR, "Basic Rate ACL Stats Data" },
+	{ DIA_ACL_EDR, "EDR ACL Stats Data" },
+	{ DIA_LE_SENT, "LE LM Sent" }, //Low Energy LL Control PDU LMP Message
+	{ DIA_LE_RECV, "LE LM Received" },
+	{ DIA_ACL_BR_RESET, "Reset Basic Rate ACL Stats" },
+	{ DIA_ACL_BR_GET, "Get Basic Rate ACL Stats" },
+	{ DIA_ACL_EDR_GET, "Get EDR ACL Stats" },
+	{ DIA_LM_ENABLE, "Toggle LMP Logging" },
+};
 
+void
+dissect_lmp_sent(proto_tree *tree, tvbuff_t *tvb, int offset)
+{
+	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN); //MAC addr of slave (or the station we connected to?)
+	offset += 4;
+	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN); //still slave despite the direction
+	//TODO handover to lmp dissector
+}
 
+void
+dissect_lmp_received(proto_tree *tree, tvbuff_t *tvb, int offset)
+{
+	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN); //still slave despite the direction
+	offset += 8;
+	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN); //still slave despite the direction
+	//TODO handover to lmp dissector
+}
 
 /* dissect a packet */
 static int
@@ -64,6 +108,7 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	proto_item *h4bcm_item, *type_item;
 	proto_tree *h4bcm_tree, *type_tree;
 	int offset;
+	int h4bcm_type;
     
     
     /*
@@ -97,7 +142,7 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
      *      [tons of decoding standard LMP]
      * 5-10:    Full MAC Address
      * 11:      Handle
-     * if h4_ref == 0x81 (??): Direction is Receive, else Sent
+     * if h4_ref == 0x81 (-> LE!!!): Direction is Receive, else Sent
      * 12: Opcode
      *  -> Low Energy LL Control PDU LMP Message
      *      0: Connection Update Request [and decoding of subvariables]
@@ -126,7 +171,6 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
      * 
      * Generic Class is PLDecoder
      * ... it even has PLDecoder setSamplesArray ?!
-     * 80/81 seems to be BLE link layer
      */
     
 	/* Avoid error: 'type' may be used uninitialized in this function */
@@ -142,85 +186,30 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	/* make entries in protocol column and info column on summary display */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "HCI H4 Broadcom");
 
-	if (tree) {
 	/* create display subtree for the protocol */
-		offset = 0;
-		h4bcm_item = proto_tree_add_item(tree, proto_h4bcm, tvb, offset, -1, ENC_NA);
-		h4bcm_tree = proto_item_add_subtree(h4bcm_item, ett_h4bcm);
+	offset = 0;
+	h4bcm_item = proto_tree_add_item(tree, proto_h4bcm, tvb, offset, -1, ENC_NA);
+	h4bcm_tree = proto_item_add_subtree(h4bcm_item, ett_h4bcm);
+	
+	/* type / opcode */
+	type_item = proto_tree_add_item(h4bcm_tree, hf_h4bcm_type, tvb, offset, 1, ENC_NA);
+	type_tree = proto_item_add_subtree(type_item, ett_h4bcm_type);
 		
-		/* type / opcode */
-		type_item = proto_tree_add_item(h4bcm_tree, hf_h4bcm_type, tvb, offset, 1, ENC_NA);
-		type_tree = proto_item_add_subtree(type_item, ett_h4bcm_type);
-        
+	h4bcm_type = tvb_get_guint8(tvb, offset);
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(h4bcm_type, h4bcm_types, "Unknown Type (%d)"));
+	offset += 1;
+		
+	switch (h4bcm_type) {
+	case DIA_LM_SENT:
+		dissect_lmp_sent(type_tree, tvb, offset);
+		break;
+	case DIA_LM_RECV:
+		dissect_lmp_received(type_tree, tvb, offset);
+		break;
+	default:
+		break;
 	}
-// 	/* see if we are being asked for details */
-// 	if (tree) {
-// 
-// 
-// 		/* ID packets have no header, no payload */
-// 		if (tvb_reported_length(tvb) == 0)
-// 			return 1;
-// 
-// 		/* meta data */
-// 		meta_item = proto_tree_add_item(h4bcm_tree, hf_h4bcm_meta, tvb, offset, 3, ENC_NA);
-// 		meta_tree = proto_item_add_subtree(meta_item, ett_h4bcm_meta);
-// 
-// 		proto_tree_add_item(meta_tree, hf_h4bcm_dir, tvb, offset, 1, ENC_NA);
-// 		proto_tree_add_item(meta_tree, hf_h4bcm_clk, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-// 		offset += 4;
-// 
-// 		proto_tree_add_item(meta_tree, hf_h4bcm_channel, tvb, offset, 1, ENC_NA);
-// 		offset += 1;
-// 
-// 		proto_tree_add_item(meta_tree, hf_h4bcm_clkbits, tvb, offset, 1, ENC_NA);
-// 		proto_tree_add_item(meta_tree, hf_h4bcm_addrbits, tvb, offset, 1, ENC_NA);
-// 		offset += 1;
-// 
-// 		/* packet header */
-// 		pkthdr_item = proto_tree_add_item(h4bcm_tree, hf_h4bcm_pkthdr, tvb, offset, 3, ENC_NA);
-// 		pkthdr_tree = proto_item_add_subtree(pkthdr_item, ett_h4bcm_pkthdr);
-// 
-// 		proto_tree_add_item(pkthdr_tree, hf_h4bcm_ltaddr, tvb, offset, 1, ENC_NA);
-// 		proto_tree_add_item(pkthdr_tree, hf_h4bcm_type, tvb, offset, 1, ENC_NA);
-// 		offset += 1;
-// 		proto_tree_add_bitmask(pkthdr_tree, tvb, offset, hf_h4bcm_flags,
-// 			ett_h4bcm_flags, flag_fields, ENC_NA);
-// 		offset += 1;
-// 		proto_tree_add_item(pkthdr_tree, hf_h4bcm_hec, tvb, offset, 1, ENC_NA);
-// 		offset += 1;
-// 
-// 		/* payload */
-// 		switch (type) {
-// 		case 0x0: /* NULL */
-// 		case 0x1: /* POLL */
-// 			break;
-// 		case 0x2: /* FHS */
-// 			dissect_fhs(h4bcm_tree, tvb, offset);
-// 			break;
-// 		case 0x3: /* DM1 */
-// 			dissect_dm1(h4bcm_tree, tvb, pinfo, offset);
-// 			break;
-// 		case 0x4: /* DH1/2-DH1 */
-// 			dissect_dm1(h4bcm_tree, tvb, pinfo, offset);
-// 			break;
-// 		case 0x5: /* HV1 */
-// 		case 0x6: /* HV2/2-EV3 */
-// 		case 0x7: /* HV3/EV3/3-EV3 */
-// 		case 0x8: /* DV/3-DH1 */
-// 		case 0x9: /* AUX1 */
-// 		case 0xa: /* DM3/2-DH3 */
-// 		case 0xb: /* DH3/3-DH3 */
-// 		case 0xc: /* EV4/2-EV5 */
-// 		case 0xd: /* EV5/3-EV5 */
-// 		case 0xe: /* DM5/2-DH5 */
-// 		case 0xf: /* DH5/3-DH5 */
-// 			proto_tree_add_item(h4bcm_tree, hf_h4bcm_payload, tvb, offset, -1, ENC_NA);
-// 			break;
-// 		default:
-// 			break;
-// 		}
-// 	}
-
+	
 	/* Return the amount of data this dissector was able to dissect */
 	return tvb_reported_length(tvb);
 }
@@ -233,8 +222,24 @@ proto_register_h4bcm(void)
 	static hf_register_info hf[] = {
 		{ &hf_h4bcm_type,
 			{ "Type", "h4bcm.type",
-			FT_NONE, BASE_NONE, NULL, 0x0,
-			"Diagnostic information type", HFILL }
+			FT_UINT8, BASE_HEX, VALS(h4bcm_types), 0x0,
+			"Diagnostic Information Type", HFILL }
+		},
+		//TODO lmp subtree ?
+		{ &hf_h4bcm_clock,
+			{ "Clock", "h4bcm.clock",
+			FT_UINT32, BASE_HEX, NULL, 0x0,
+			"Bluetooth Master Clock", HFILL }
+		},
+		{ &hf_h4bcm_maclow,
+			{ "MAC Address", "h4bcm.maclow",
+			FT_BYTES, SEP_COLON, NULL, 0x0,
+			"Lower MAC address part, sufficient for l2ping ff:ff:maclow", HFILL }
+		},
+		{ &hf_h4bcm_payload,
+			{ "Payload", "h4bcm.payload",
+			FT_BYTES, BASE_NONE, NULL, 0x0,
+			NULL, HFILL }
 		},
 	};
 
