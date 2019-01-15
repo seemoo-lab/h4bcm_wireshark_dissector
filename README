@@ -6,14 +6,18 @@ Bluetooth chips. Broadcom not only supports sending standard messages
 such as HCI commands and events but also has an undocumented
 diagnostic protocol using the H4 serial data type 0x07.
 
+Subprotocols inside Broadcom's diagnostic protocol include the Link Management
+Protocol (LMP) and Bluetooth Baseband (BB). The dissectors for LMP and BB were
+updated to be compatible with Wireshark 2.6. Credit for most of the LMP and BB
+dissector goes to the original authors of libbtbb.
+
 # About this repository
 
 This repository contains only the Wireshark dissector without the rest of
 Internalblue. All credit goes to the original authors of InternalBlue. For
 additional information see the original repository:
 
-https://github.com/seemoolab/internalblue
-
+https://github.com/seemoo-lab/internalblue
 
 # Build and Install
 

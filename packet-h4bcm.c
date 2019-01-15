@@ -36,14 +36,30 @@
 /* type definitions for Broadcom diagnostics */
 #define DIA_LM_SENT			0x00
 #define DIA_LM_RECV			0x01
-#define DIA_ACL_BR			0x16
-#define DIA_ACL_EDR			0x17
+#define DIA_MEM_PEEK_RESP		0x03
+#define DIA_MEM_DUMP_RESP		0x04
+#define DIA_TEST_COMPL			0x0a
+#define DIA_MEM_POKE_RESP		0x11
+#define DIA_CPU_LOAD_RESP		0x15
+#define DIA_ACL_BR_RESP			0x16
+#define DIA_ACL_EDR_RESP		0x17
+#define DIA_AUX_RESP			0x18
+#define DIA_ACL_UNKN1_RESP		0x1a
+#define DIA_ACL_UNKN2_RESP		0x1b
 #define DIA_LE_SENT			0x80
 #define DIA_LE_RECV			0x81
 #define DIA_ACL_BR_RESET		0xb9
 #define DIA_ACL_BR_GET			0xc1
 #define DIA_ACL_EDR_GET			0xc2
+#define DIA_AUX_GET			0xc3
+#define DIA_ACL_UNKN1_GET		0xc5
+#define DIA_ACL_UNKN2_GET		0xc6
+#define DIA_CON_GET			0xcf
 #define DIA_LM_ENABLE			0xf0
+#define DIA_MEM_PEEK_GET		0xf1
+#define DIA_MEM_POKE_GET		0xf2
+#define DIA_MEM_DUMP_GET		0xf3
+#define DIA_PKT_TEST			0xf6
 
 
 /* function prototypes */
@@ -52,15 +68,18 @@ void proto_reg_handoff_h4bcm(void);
 /* initialize the protocol and registered fields */
 static int proto_h4bcm = -1;
 static int hf_h4bcm_type = -1;
-static int hf_h4bcm_lmp = -1;
 static int hf_h4bcm_clock = -1;
 static int hf_h4bcm_maclow = -1;
+static int hf_h4bcm_pldhdr = -1;
+static int hf_h4bcm_llid = -1;
+static int hf_h4bcm_pldflow = -1;
+static int hf_h4bcm_length = -1;
 static int hf_h4bcm_payload = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
 static gint ett_h4bcm_type = -1;
-static gint ett_h4bcm_lmp = -1;
+static gint ett_h4bcm_pldhdr = -1;
 
 /* subdissectors */
 static dissector_handle_t btbrlmp_handle = NULL; //TODO lmp handover
@@ -69,25 +88,82 @@ static dissector_handle_t btbrlmp_handle = NULL; //TODO lmp handover
 static const value_string h4bcm_types[] = {
 	{ DIA_LM_SENT, "LM Sent" },
 	{ DIA_LM_RECV, "LM Received" },
-	{ DIA_ACL_BR, "Basic Rate ACL Stats Data" },
-	{ DIA_ACL_EDR, "EDR ACL Stats Data" },
-	{ DIA_LE_SENT, "LE LM Sent" }, //Low Energy LL Control PDU LMP Message
+	{ DIA_MEM_PEEK_RESP, "Memory Access Response to Peek" },
+	{ DIA_MEM_DUMP_RESP, "Memory Hex Dump Response" },
+	{ DIA_TEST_COMPL, "Reported Completed Test" },
+	{ DIA_MEM_POKE_RESP, "Memory Access Response to Poke" },
+	{ DIA_CPU_LOAD_RESP, "CPU Load" },
+	{ DIA_ACL_BR_RESP, "Basic Rate ACL Stats Data" },
+	{ DIA_ACL_EDR_RESP, "EDR ACL Stats Data" },
+	{ DIA_AUX_RESP, "Received Aux Response" },
+	{ DIA_ACL_UNKN1_RESP, "ACL Stats Data (Type 0x1A)" },
+	{ DIA_ACL_UNKN2_RESP, "ACL Stats Data (Type 0x1B)" },
+	{ DIA_LE_SENT, "LE LM Sent" },				// Low Energy LL Control PDU LMP Message
 	{ DIA_LE_RECV, "LE LM Received" },
-	{ DIA_ACL_BR_RESET, "Reset Basic Rate ACL Stats" },
+	{ DIA_ACL_BR_RESET, "Reset Basic Rate ACL Stats" },	// memclr(DHM_ACLPktStats)
 	{ DIA_ACL_BR_GET, "Get Basic Rate ACL Stats" },
 	{ DIA_ACL_EDR_GET, "Get EDR ACL Stats" },
+	{ DIA_ACL_UNKN1_GET, "Get ACL Stats (Type 0x1A)" },	// BTMUtil_Send_2045_ACL_Stats(0x1a, cmd)
+	{ DIA_ACL_UNKN2_GET, "Get ACL Stats (Type 0x1B)" },
+	{ DIA_AUX_GET, "Get Aux Stats"},			// BTMUtil_SendAuxStats
+	{ DIA_CON_GET, "Get Connection Stats"},			// ulp_send_connection_stats(0x1F)
 	{ DIA_LM_ENABLE, "Toggle LMP Logging" },
+	{ DIA_MEM_PEEK_GET, "Memory Peek" },
+	{ DIA_MEM_POKE_GET, "Memory Poke" },
+	{ DIA_MEM_DUMP_GET, "Memory Hex Dump" },
+	{ DIA_PKT_TEST, "BTMMstr_BBPktTest" },
 };
 
-void
-dissect_lmp_sent(proto_tree *tree, tvbuff_t *tvb, int offset)
+static const value_string llid_codes[] = {
+	{ 0x0, "undefined" },
+	{ 0x1, "Continuation fragment of an L2CAP message (ACL-U)" },
+	{ 0x2, "Start of an L2CAP message or no fragmentation (ACL-U)" },
+	{ 0x3, "LMP message (ACL-C)" },
+	{ 0, NULL }
+};
+
+/* one byte payload header */
+int
+dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
+	proto_item *hdr_item;
+	proto_tree *hdr_tree;
+
+	hdr_item = proto_tree_add_item(tree, hf_h4bcm_pldhdr, tvb, offset, 1, ENC_NA);
+	hdr_tree = proto_item_add_subtree(hdr_item, ett_h4bcm_pldhdr);
+
+	proto_tree_add_item(hdr_tree, hf_h4bcm_llid, tvb, offset, 1, ENC_NA);
+	proto_tree_add_item(hdr_tree, hf_h4bcm_pldflow, tvb, offset, 1, ENC_NA);
+	proto_tree_add_item(hdr_tree, hf_h4bcm_length, tvb, offset, 1, ENC_NA);
+
+	/* payload length */
+	return tvb_get_guint8(tvb, offset) >> 3;
+}
+
+void
+dissect_lmp_sent(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+{
+	int len;
+	int llid;
+	tvbuff_t *pld_tvb;
+	
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
-	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN); //MAC addr of slave (or the station we connected to?)
+	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
-	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN); //still slave despite the direction
-	//TODO handover to lmp dissector
+	len = dissect_payload_header1(tree, tvb, offset);
+	llid = tvb_get_guint8(tvb, offset) & 0x3;
+	offset += 1;
+	
+	if (llid == 3 && btbrlmp_handle) {
+		/* LMP */
+		pld_tvb = tvb_new_subset_length_caplen(tvb, offset, len, len);
+		call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
+	} else {
+		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
+	}
+	
+	//TODO except from offset, lmp sent / received are pretty similar ...
 }
 
 void
@@ -95,9 +171,9 @@ dissect_lmp_received(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
-	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN); //still slave despite the direction
+	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 8;
-	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN); //still slave despite the direction
+	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
 	//TODO handover to lmp dissector
 }
 
@@ -140,6 +216,13 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
      *      Variant 2:
      *      9: Header, Offset = 10
      *      [tons of decoding standard LMP]
+     * 		Header decoding: -> Standard Header before LMP as in existing wireshark code
+     * 			a1 & 3:	1: ACL-U / Continuation fragment of an L2CAP message
+     * 				2: ACL-U / Start of an L2CAP message or no fragmentation
+     * 				3: ACL-C / LMP message
+     * 				4: Undefined
+     * 			(a1>>2) & 1: Flow
+     * 			a1>>3:	Length
      * 5-10:    Full MAC Address
      * 11:      Handle
      * if h4_ref == 0x81 (-> LE!!!): Direction is Receive, else Sent
@@ -201,7 +284,7 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 		
 	switch (h4bcm_type) {
 	case DIA_LM_SENT:
-		dissect_lmp_sent(type_tree, tvb, offset);
+		dissect_lmp_sent(tvb, pinfo, tree, offset);
 		break;
 	case DIA_LM_RECV:
 		dissect_lmp_received(type_tree, tvb, offset);
@@ -225,16 +308,35 @@ proto_register_h4bcm(void)
 			FT_UINT8, BASE_HEX, VALS(h4bcm_types), 0x0,
 			"Diagnostic Information Type", HFILL }
 		},
-		//TODO lmp subtree ?
 		{ &hf_h4bcm_clock,
 			{ "Clock", "h4bcm.clock",
 			FT_UINT32, BASE_HEX, NULL, 0x0,
 			"Bluetooth Master Clock", HFILL }
 		},
 		{ &hf_h4bcm_maclow,
-			{ "MAC Address", "h4bcm.maclow",
+			{ "Remote MAC Address", "h4bcm.maclow",
 			FT_BYTES, SEP_COLON, NULL, 0x0,
 			"Lower MAC address part, sufficient for l2ping ff:ff:maclow", HFILL }
+		},
+		{ &hf_h4bcm_pldhdr,
+			{ "Payload Header", "h4bcm.pldhdr",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_llid,
+			{ "LLID", "h4bcm.llid",
+			FT_UINT8, BASE_HEX, VALS(llid_codes), 0x03,
+			"Logical Link ID", HFILL }
+		},
+		{ &hf_h4bcm_pldflow,
+			{ "Flow", "h4bcm.flow",
+			FT_BOOLEAN, 8, NULL, 0x04,
+			"Payload Flow indication", HFILL }
+		},
+		{ &hf_h4bcm_length,
+			{ "Length", "h4bcm.length",
+			FT_UINT8, BASE_DEC, NULL, 0xf8,
+			"Payload Length", HFILL }
 		},
 		{ &hf_h4bcm_payload,
 			{ "Payload", "h4bcm.payload",
@@ -247,6 +349,7 @@ proto_register_h4bcm(void)
 	static gint *ett[] = {
 		&ett_h4bcm,
 		&ett_h4bcm_type,
+		&ett_h4bcm_pldhdr,
 	};
 
 	/* register the protocol name and description */
@@ -267,9 +370,11 @@ proto_reg_handoff_h4bcm(void)
 	dissector_handle_t h4bcm_handle;
 	h4bcm_handle = create_dissector_handle(dissect_h4bcm, proto_h4bcm);
 	
-	// hci_h4.type == 0x07
+	/* hci_h4.type == 0x07 */
 	dissector_add_uint("hci_h4.type", 0x07, h4bcm_handle);
-	//btbrlmp_handle = find_dissector("btbrlmp");
+	
+	/* LMP dissector from https://github.com/greatscottgadgets/libbtbb */
+	btbrlmp_handle = find_dissector("btbrlmp");
 }
 
 /*
