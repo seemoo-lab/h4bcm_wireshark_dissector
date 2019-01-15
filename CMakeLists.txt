@@ -48,6 +48,7 @@ set(LINK_MODE_MODULE MODULE)
 
 set(DISSECTOR_SRC
 	packet-h4bcm.c
+	packet-btbrlmp.c
 )
 
 set(PLUGIN_FILES

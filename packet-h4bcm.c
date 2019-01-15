@@ -31,6 +31,7 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
+#include <string.h>
 
 
 /* type definitions for Broadcom diagnostics */
@@ -82,7 +83,7 @@ static gint ett_h4bcm_type = -1;
 static gint ett_h4bcm_pldhdr = -1;
 
 /* subdissectors */
-static dissector_handle_t btbrlmp_handle = NULL; //TODO lmp handover
+static dissector_handle_t btbrlmp_handle = NULL;
 
 /* reversed Broadcom diagnostic types */
 static const value_string h4bcm_types[] = {
@@ -140,42 +141,64 @@ dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 	return tvb_get_guint8(tvb, offset) >> 3;
 }
 
+/* Dissect LM and LE LM header */
 void
-dissect_lmp_sent(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int is_sent)
 {
-	int len;
-	int llid;
-	tvbuff_t *pld_tvb;
+	guint32 mac;
+	gchar *mac_string = (gchar *)g_malloc(12);
 	
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
-	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	offset += 4;
-	len = dissect_payload_header1(tree, tvb, offset);
-	llid = tvb_get_guint8(tvb, offset) & 0x3;
-	offset += 1;
+	mac = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+	g_snprintf(mac_string, 12,
+		"%02x:%02x:%02x:%02x",
+		(mac & 0xff000000) >>24,
+		(mac & 0x00ff0000) >>16,
+		(mac & 0x0000ff00) >> 8,
+		(mac & 0x000000ff));
 	
-	if (llid == 3 && btbrlmp_handle) {
-		/* LMP */
-		pld_tvb = tvb_new_subset_length_caplen(tvb, offset, len, len);
-		call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
+	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	
+	if (is_sent == 1) {
+		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "local");
+		col_set_str(pinfo->cinfo, COL_RES_DL_DST, mac_string);
 	} else {
-		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
+		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, mac_string);
+		col_set_str(pinfo->cinfo, COL_RES_DL_DST, "local");
 	}
 	
-	//TODO except from offset, lmp sent / received are pretty similar ...
 }
 
 void
-dissect_lmp_received(proto_tree *tree, tvbuff_t *tvb, int offset)
+dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int is_sent)
 {
-	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
-	offset += 4;
-	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	offset += 8;
-	proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
-	//TODO handover to lmp dissector
+	int len;
+	//int llid;
+	tvbuff_t *pld_tvb;
+	
+
+	/* LMP in send direction*/
+	if (is_sent == 1 && btbrlmp_handle) {
+		len = dissect_payload_header1(tree, tvb, offset);
+		/* llid = tvb_get_guint8(tvb, offset) & 0x3; */
+		offset += 1;
+		pld_tvb = tvb_new_subset_length_caplen(tvb, offset, len, len);
+		call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
+	}
+	/* LMP in receive direction has different offsets */
+	else if (is_sent == 0 && btbrlmp_handle) {
+		//TODO	
+		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
+		//pld_tvb = tvb_new_subset_length_caplen(tvb, offset, 17, 17);
+		//call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
+	}
+	else {
+		//TODO move offset upwards to make this work
+		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
+	}
 }
+
 
 /* dissect a packet */
 static int
@@ -185,76 +208,6 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	proto_tree *h4bcm_tree, *type_tree;
 	int offset;
 	int h4bcm_type;
-    
-    
-    /*
-     * Known structure so far:
-     * 1 byte flow, 1 = receive, 0 = send
-     * 4 bytes clock 
-     * 4 bytes lower mac address
-     * lmp send:
-     *      1202, 17 bytes zero
-     *      at offset 0x1d: 02 0107 74c5 0800 1706 
-     *      6 bytes mac address reverse byte order
-     *      0400 0000 8f5d 0562 5800 0000 0000 0000 0000 00
-     * lmp rec:
-     *      000000 (3 bytes zero)
-     *      lmp packet header from there
-     *      at offset 0x1d: 00 0007 6084 08 (zeros) 
-     * Offset & 1: 1 = Master, 0 = Slave
-     * Offset >>1: Opcode
-     */
-        
-    /*
-     * Packet Decoder:
-     * 0:   00 (Send)
-     * 1-4: Clock
-     * 5-8: 4 Byte MAC Address
-     * if Byte 0 (whatever condition):
-     *      Variant 1:
-     *      12: Header, Offset = 13
-     *      Variant 2:
-     *      9: Header, Offset = 10
-     *      [tons of decoding standard LMP]
-     * 		Header decoding: -> Standard Header before LMP as in existing wireshark code
-     * 			a1 & 3:	1: ACL-U / Continuation fragment of an L2CAP message
-     * 				2: ACL-U / Start of an L2CAP message or no fragmentation
-     * 				3: ACL-C / LMP message
-     * 				4: Undefined
-     * 			(a1>>2) & 1: Flow
-     * 			a1>>3:	Length
-     * 5-10:    Full MAC Address
-     * 11:      Handle
-     * if h4_ref == 0x81 (-> LE!!!): Direction is Receive, else Sent
-     * 12: Opcode
-     *  -> Low Energy LL Control PDU LMP Message
-     *      0: Connection Update Request [and decoding of subvariables]
-     *      1: Channel Map Request [and decoding of subvariables]
-     *      ...
-     *     12: Version ID
-     *     13: Reject Ind
-     * 
-     * 
-     * General commands:
-     * F0:
-     *      1: Turn on LMP Logging
-     *      0: Turn off LMP Logging
-     * B9: Reset Basic Rate ACL Stats
-     * C2: Get EDR ACL Stats
-     * C1: Get Basic Rate ACL Stats
-     * 17: EDR ACL Stats Data
-     *      1: Null Packets Received
-     *      1 >> 16: Poll Packets Received
-     *      1 >> 32: DM1 Packets Received
-     *      high(1) >> 16: 2DH1 Packets Received
-     *      ... [lots of decoding]
-     *      57: TestMode Packet Errors
-     * 16: Basic Rate ACL Stats Data
-     *      [also lots of decoding]
-     * 
-     * Generic Class is PLDecoder
-     * ... it even has PLDecoder setSamplesArray ?!
-     */
     
 	/* Avoid error: 'type' may be used uninitialized in this function */
 	guint8 type = 0xff;
@@ -284,10 +237,32 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 		
 	switch (h4bcm_type) {
 	case DIA_LM_SENT:
-		dissect_lmp_sent(tvb, pinfo, tree, offset);
+		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
+		offset += 8;
+		dissect_lmp(tvb, pinfo, h4bcm_tree, offset, 1);
 		break;
+	/* TODO
+	 * according to Packet Logger, the DM1 header either starts at offset
+	 * 10 (lm_sent) or 13 (lm_received)
+	 */
 	case DIA_LM_RECV:
-		dissect_lmp_received(type_tree, tvb, offset);
+		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 0);
+		offset += 12;
+		dissect_lmp(tvb, pinfo, h4bcm_tree, offset, 0);
+		break;
+	/* TODO
+	 * 12: Opcode
+	 * 	0: Connection Update Request [and decoding of subvariables]
+	 * 	1: Channel Map Request [and decoding of subvariables]
+	 * 	...
+	 * 	12: Version ID
+	 * 	13: Reject Ind 
+	 */
+	case DIA_LE_SENT:
+		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
+		break;
+	case DIA_LE_RECV:
+		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 0);
 		break;
 	default:
 		break;
