@@ -33,7 +33,6 @@
 #include <epan/prefs.h>
 #include <string.h>
 
-
 /* type definitions for Broadcom diagnostics */
 #define DIA_LM_SENT			0x00
 #define DIA_LM_RECV			0x01
@@ -62,7 +61,6 @@
 #define DIA_MEM_DUMP_GET		0xf3
 #define DIA_PKT_TEST			0xf6
 
-
 /* function prototypes */
 void proto_reg_handoff_h4bcm(void);
 
@@ -83,7 +81,7 @@ static gint ett_h4bcm_type = -1;
 static gint ett_h4bcm_pldhdr = -1;
 
 /* subdissectors */
-static dissector_handle_t btbrlmp_handle = NULL;
+static dissector_handle_t btlmp_handle = NULL;
 
 /* reversed Broadcom diagnostic types */
 static const value_string h4bcm_types[] = {
@@ -123,6 +121,112 @@ static const value_string llid_codes[] = {
 	{ 0, NULL }
 };
 
+/* This table is needed due to Brodcoms wrong LMP length passing... */
+static const int lmp_lengths[] = {
+	 0, /* LMP_VSC */
+	 2, /* LMP_NAME_REQ */
+	17, /* LMP_NAME_RES */
+	 2, /* LMP_ACCEPTED */
+	 3, /* LMP_NOT_ACCEPTED */
+	 1, /* LMP_CLKOFFSET_REQ */
+	 3, /* LMP_CLKOFFSET_RES */
+	 2, /* LMP_DETACH */
+	17, /* LMP_IN_RAND */
+	17, /* LMP_COMB_KEY */
+	17, /* LMP_UNIT_KEY */
+	17, /* LMP_AU_RAND */
+	 5, /* LMP_SRES */
+	17, /* LMP_TEMP_RAND */
+	17, /* LMP_TEMP_KEY */
+	 2, /* LMP_ENCRYPTION_MODE_REQ */
+	 2, /* LMP_ENCRYPTION_KEY_SIZE_REQ */
+	17, /* LMP_START_ENCRYPTION_REQ */
+	 1, /* LMP_STOP_ENCRYPTION_REQ */
+	 5, /* LMP_SWITCH_REQ */
+	 7, /* LMP_HOLD */
+	 7, /* LMP_HOLD_REQ */
+	10, /* LMP_SNIFF_REQ */
+	 0,
+	 1, /* LMP_UNSNIFF_REQ */
+	17, /* LMP_PARK_REQ */
+	 0,
+	 4, /* LMP_SET_BROADCAST_SCAN_WINDOW */
+	11, /* LMP_MODIFY_BEACON */
+	15, /* LMP_UNPARK_BD_ADDR_REQ */
+	13, /* LMP_UNPARK_PM_ADDR_REQ */
+	 2, /* LMP_INCR_POWER_REQ */
+	 2, /* LMP_DECR_POWER_REQ */
+	 1, /* LMP_MAX_POWER */
+	 1, /* LMP_MIN_POWER */
+	 1, /* LMP_AUTO_RATE */
+	 2, /* LMP_PREFERRED_RATE */
+	 6, /* LMP_VERSION_REQ */
+	 6, /* LMP_VERSION_RES */
+	 9, /* LMP_FEATURES_REQ */
+	 9, /* LMP_FEATURES_RES */
+	 4, /* LMP_QUALITY_OF_SERVICE */
+	 4, /* LMP_QUALITY_OF_SERVICE_REQ */
+	 7, /* LMP_SCO_LINK_REQ */
+	 3, /* LMP_REMOVE_SCO_LINK_REQ */
+	 2, /* LMP_MAX_SLOT */
+	 2, /* LMP_MAX_SLOT_REQ */
+	 1, /* LMP_TIMING_ACCURACY_REQ */
+	 3, /* LMP_TIMING_ACCURACY_RES */
+	 1, /* LMP_SETUP_COMPLETE */
+	 1, /* LMP_USE_SEMI_PERMANENT_KEY */
+	 1, /* LMP_HOST_CONNECTION_REQ */
+	 9, /* LMP_SLOT_OFFSET */
+	 3, /* LMP_PAGE_MODE_REQ */
+	 3, /* LMP_PAGE_SCAN_MODE_REQ */
+	 3, /* LMP_SUPERVISION_TIMEOUT */
+	 1, /* LMP_TEST_ACTIVATE */
+	10, /* LMP_TEST_CONTROL */
+	 1, /* LMP_ENCRYPTION_KEY_SIZE_MASK_REQ */
+	 3, /* LMP_ENCRYPTION_KEY_SIZE_MASK_RES */
+	16, /* LMP_SET_AFH */
+	 4, /* LMP_ENCAPSULATED_HEADER */
+	17, /* LMP_ENCAPSULATED_PAYLOAD */
+	17, /* LMP_SIMPLE_PAIRING_CONFIRM */
+	17, /* LMP_SIMPLE_PAIRING_NUMBER */
+	17, /* LMP_DHKEY_CHECK */
+};
+
+static const int lmp_lengths_ext[] = {
+	 0,
+	 4, /* LMP_ACCEPTED_EXT */
+	 5, /* LMP_NOT_ACCEPTED_EXT */
+	12, /* LMP_FEATURES_REQ_EXT */
+	12, /* LMP_FEATURES_RES_EXT */
+	 0,
+	 0,
+	 0,
+	 0,
+	 0,
+	 0,
+	 3, /* LMP_PACKET_TYPE_TABLE_REQ */
+	16, /* LMP_ESCO_LINK_REQ */
+	 4, /* LMP_REMOVE_ESCO_LINK_REQ */
+	 0,
+	 0,
+	 7, /* LMP_CHANNEL_CLASSIFICATION_REQ */
+	12, /* LMP_CHANNEL_CLASSIFICATION */
+	 0,
+	 0,
+	 0,
+	 9, /* LMP_SNIFF_SUBRATING_REQ */
+	 9, /* LMP_SNIFF_SUBRATING_RES */
+	 2, /* LMP_PAUSE_ENCRYPTION_REQ */
+	 2, /* LMP_RESUME_ENCRYPTION_REQ */
+	 5, /* LMP_IO_CAPABILITY_REQ */
+	 5, /* LMP_IO_CAPABILITY_RES */
+	 2, /* LMP_NUMERIC_COMPARISON_FAILED */
+	 2, /* LMP_PASSKEY_FAILED */
+	 2, /* LMP_OOB_FAILED */
+	 3, /* LMP_KEYPRESS_NOTIFICATION */
+	 3, /* LMP_POWER_CONTROL_REQ */
+	 3, /* LMP_POWER_CONTROL_RES */
+};
+
 /* one byte payload header */
 int
 dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
@@ -141,15 +245,18 @@ dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 	return tvb_get_guint8(tvb, offset) >> 3;
 }
 
-/* Dissect LM and LE LM header */
+/* Dissect common LM and LE LM header */
 void
 dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int is_sent)
 {
 	guint32 mac;
 	gchar *mac_string = (gchar *)g_malloc(12);
 	
+	/* clock of the BT master */
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
+	
+	/* decode and display MAC address in src/dst fields */
 	mac = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
 	g_snprintf(mac_string, 12,
 		"%02x:%02x:%02x:%02x",
@@ -170,31 +277,50 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 	
 }
 
+/* Pass LMP handling to existing dissector if available */
 void
-dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int is_sent)
+dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
 	int len;
-	//int llid;
+	int opcode;
+	int dm1_hdr;
 	tvbuff_t *pld_tvb;
 	
+	
+	/* DM1 header is common in both directions */
+	dm1_hdr = tvb_get_guint8(tvb, offset);
+	len = dissect_payload_header1(tree, tvb, offset);
+	
+	offset += 1;
+	
+	/* In receive direction, diagnostic LMP always sends a packet length 17,
+	 * which makes failed assertions inside the LMP decoder...
+	 * The fixed length corresponds to a DM1 header of 0x8f in flow direction
+	 * receive, so we can check this directly instead of maybe re-checking
+	 * valid length 17 in sent direction.
+	 * This fix is really ugly, but it makes the LMP decoders assertions pass.
+	 */
+	if (dm1_hdr == 0x8f) {
+		/* Get normal / extended opcode length. Will be 0 if undefined. */
+		len = 0;
+		opcode = tvb_get_guint8(tvb, offset) >> 1;
+		if (opcode <= 65) {
+			len = lmp_lengths[opcode];
+		} else if (opcode == 127) {
+			opcode = tvb_get_guint8(tvb, offset + 1);
+			if (opcode <= 32) {
+				len = lmp_lengths_ext[opcode];
+			}
+		}
+	}
+	
 
-	/* LMP in send direction*/
-	if (is_sent == 1 && btbrlmp_handle) {
-		len = dissect_payload_header1(tree, tvb, offset);
-		/* llid = tvb_get_guint8(tvb, offset) & 0x3; */
-		offset += 1;
+	/* Check that we have a LMP dissector or else just display raw payload */
+	if (btlmp_handle && len != 0) {
 		pld_tvb = tvb_new_subset_length_caplen(tvb, offset, len, len);
-		call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
-	}
-	/* LMP in receive direction has different offsets */
-	else if (is_sent == 0 && btbrlmp_handle) {
-		//TODO	
-		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
-		//pld_tvb = tvb_new_subset_length_caplen(tvb, offset, 17, 17);
-		//call_dissector(btbrlmp_handle, pld_tvb, pinfo, tree);
-	}
-	else {
-		//TODO move offset upwards to make this work
+		call_dissector(btlmp_handle, pld_tvb, pinfo, tree);
+	} else {
+		/* Maximum (constant) LMP length is 17 */
 		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
 	}
 }
@@ -239,16 +365,12 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	case DIA_LM_SENT:
 		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
 		offset += 8;
-		dissect_lmp(tvb, pinfo, h4bcm_tree, offset, 1);
+		dissect_lmp(tvb, pinfo, h4bcm_tree, offset);
 		break;
-	/* TODO
-	 * according to Packet Logger, the DM1 header either starts at offset
-	 * 10 (lm_sent) or 13 (lm_received)
-	 */
 	case DIA_LM_RECV:
 		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 0);
-		offset += 12;
-		dissect_lmp(tvb, pinfo, h4bcm_tree, offset, 0);
+		offset += 11;
+		dissect_lmp(tvb, pinfo, h4bcm_tree, offset);
 		break;
 	/* TODO
 	 * 12: Opcode
@@ -267,6 +389,14 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	default:
 		break;
 	}
+	
+	
+	/* TODO
+	 * Packet Logger still has some decoder details for:
+	 * 0x16 contents
+	 * 0x17 contents
+	 * 
+	 */
 	
 	/* Return the amount of data this dissector was able to dissect */
 	return tvb_reported_length(tvb);
@@ -349,7 +479,7 @@ proto_reg_handoff_h4bcm(void)
 	dissector_add_uint("hci_h4.type", 0x07, h4bcm_handle);
 	
 	/* LMP dissector from https://github.com/greatscottgadgets/libbtbb */
-	btbrlmp_handle = find_dissector("btbrlmp");
+	btlmp_handle = find_dissector("btlmp");
 }
 
 /*

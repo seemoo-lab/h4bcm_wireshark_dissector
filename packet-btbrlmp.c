@@ -5216,12 +5216,12 @@ proto_register_btbrlmp(void)
 
 	/* register the protocol name and description */
 	proto_btbrlmp = proto_register_protocol(
-		"Bluetooth BR Link Manager Protocol",	/* full name */
-		"btbrlmp",		/* short name */
-		"btbrlmp"			/* abbreviation (e.g. for filters) */
+		"Bluetooth Link Manager Protocol",	/* full name */
+		"btlmp",		/* short name */
+		"btlmp"			/* abbreviation (e.g. for filters) */
 		);
 
-	register_dissector("btbrlmp", dissect_btbrlmp, proto_btbrlmp);
+	register_dissector("btlmp", dissect_btbrlmp, proto_btbrlmp);
 
 	/* register the header fields and subtrees used */
 	proto_register_field_array(proto_btbrlmp, hf, array_length(hf));
