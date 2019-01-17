@@ -472,7 +472,7 @@ static const true_false_string tid = {
 
 /* short LMP opcodes */
 static const value_string opcode[] = {
-	{ LMP_VSC, "LMP_vendor_specific" },
+	{ LMP_VSC, "LMP_Broadcom_BPCS" },
 	{ LMP_NAME_REQ, "LMP_name_req" },
 	{ LMP_NAME_RES, "LMP_name_res" },
 	{ LMP_ACCEPTED, "LMP_accepted" },

@@ -32,6 +32,7 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <string.h>
+#include <stdio.h> //TODO remove
 
 /* type definitions for Broadcom diagnostics */
 #define DIA_LM_SENT			0x00
@@ -74,11 +75,54 @@ static int hf_h4bcm_llid = -1;
 static int hf_h4bcm_pldflow = -1;
 static int hf_h4bcm_length = -1;
 static int hf_h4bcm_payload = -1;
+static int hf_h4bcm_lm_toggle = -1;
+static int hf_h4bcm_stats_null_rcvd = -1;
+static int hf_h4bcm_stats_poll_rcvd = -1;
+static int hf_h4bcm_stats_dm1_rcvd = -1;
+static int hf_h4bcm_stats_dh1_rcvd = -1;
+static int hf_h4bcm_stats_dv_rcvd = -1;
+static int hf_h4bcm_stats_aux1_rcvd = -1;
+static int hf_h4bcm_stats_dm3_rcvd = -1;
+static int hf_h4bcm_stats_dh3_rcvd = -1;
+static int hf_h4bcm_stats_dm5_rcvd = -1;
+static int hf_h4bcm_stats_dh5_rcvd = -1;
+static int hf_h4bcm_stats_null_tx = -1;
+static int hf_h4bcm_stats_poll_tx = -1;
+static int hf_h4bcm_stats_dm1_tx = -1;
+static int hf_h4bcm_stats_dh1_tx = -1;
+static int hf_h4bcm_stats_dv_tx = -1;
+static int hf_h4bcm_stats_aux1_tx = -1;
+static int hf_h4bcm_stats_dm3_tx = -1;
+static int hf_h4bcm_stats_dh3_tx = -1;
+static int hf_h4bcm_stats_dm5_tx = -1;
+static int hf_h4bcm_stats_dh5_tx = -1;
+static int hf_h4bcm_stats_acl_rx = -1;
+static int hf_h4bcm_stats_acl_tx = -1;
+static int hf_h4bcm_stats_hec_err = -1;
+static int hf_h4bcm_stats_crc_err = -1;
+static int hf_h4bcm_stats_seqn_rep = -1;
+static int hf_h4bcm_stats_soft_rst = -1;
+static int hf_h4bcm_stats_test_tx = -1;;
+static int hf_h4bcm_stats_test_rx = -1;
+static int hf_h4bcm_stats_test_err = -1;
+static int hf_h4bcm_stats_2dh1_rcvd = -1;
+static int hf_h4bcm_stats_3dh1_rcvd = -1;
+static int hf_h4bcm_stats_2dh3_rcvd = -1;
+static int hf_h4bcm_stats_3dh3_rcvd = -1;
+static int hf_h4bcm_stats_2dh5_rcvd = -1;
+static int hf_h4bcm_stats_3dh5_rcvd = -1;
+static int hf_h4bcm_stats_2dh1_tx = -1;
+static int hf_h4bcm_stats_3dh1_tx = -1;
+static int hf_h4bcm_stats_2dh3_tx = -1;
+static int hf_h4bcm_stats_3dh3_tx = -1;
+static int hf_h4bcm_stats_2dh5_tx = -1;
+static int hf_h4bcm_stats_3dh5_tx = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
-static gint ett_h4bcm_type = -1;
 static gint ett_h4bcm_pldhdr = -1;
+static gint ett_h4bcm_acl_br_stats = -1;
+static gint ett_h4bcm_acl_edr_stats = -1;
 
 /* subdissectors */
 static dissector_handle_t btlmp_handle = NULL;
@@ -227,12 +271,20 @@ static const int lmp_lengths_ext[] = {
 	 3, /* LMP_POWER_CONTROL_RES */
 };
 
+static const true_false_string lm_toggle = {
+	"enabled",
+	"disabled"
+};
+
 /* one byte payload header */
 int
 dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	proto_item *hdr_item;
 	proto_tree *hdr_tree;
+	
+	/* DM1 is only transmitted within full diagnostic reports */
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
 
 	hdr_item = proto_tree_add_item(tree, hf_h4bcm_pldhdr, tvb, offset, 1, ENC_NA);
 	hdr_tree = proto_item_add_subtree(hdr_item, ett_h4bcm_pldhdr);
@@ -252,6 +304,9 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 	guint32 mac;
 	gchar *mac_string = (gchar *)g_malloc(12);
 	
+	/* LMP and LCP are only transmitted within full diagnostic reports */
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
+	
 	/* clock of the BT master */
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
@@ -268,11 +323,11 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	
 	if (is_sent == 1) {
-		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "local");
+		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
 		col_set_str(pinfo->cinfo, COL_RES_DL_DST, mac_string);
 	} else {
 		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, mac_string);
-		col_set_str(pinfo->cinfo, COL_RES_DL_DST, "local");
+		col_set_str(pinfo->cinfo, COL_RES_DL_DST, "controller");
 	}
 	
 }
@@ -285,11 +340,16 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 	int opcode;
 	int dm1_hdr;
 	tvbuff_t *pld_tvb;
-	
+
+	/* LMP is only transmitted within full diagnostic reports */
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
 	
 	/* DM1 header is common in both directions */
 	dm1_hdr = tvb_get_guint8(tvb, offset);
 	len = dissect_payload_header1(tree, tvb, offset);
+	
+	/* Longest LMP packet is 17 bytes */
+	DISSECTOR_ASSERT(len <= 17);
 	
 	offset += 1;
 	
@@ -325,6 +385,204 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 	}
 }
 
+/* TODO placeholder for responses we don't know yet */
+void
+dissect_unkn_resp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+{
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
+
+	proto_tree_add_item(tree, hf_h4bcm_type, tvb, offset-1, 1, ENC_NA);
+
+	/* Sent from chip to host */
+	col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
+	col_set_str(pinfo->cinfo, COL_RES_DL_DST, "host");
+}
+
+/* TODO placeholder for commands with arguments that are none or unknown */
+void
+dissect_unkn_get(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+{
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) >= 1);
+
+	proto_tree_add_item(tree, hf_h4bcm_type, tvb, offset-1, 1, ENC_NA);
+
+	/* Sent from host to chip */
+	col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "host");
+	col_set_str(pinfo->cinfo, COL_RES_DL_DST, "controller");
+}
+
+/* ACL BR stats */
+void
+dissect_acl_br_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+
+{
+	proto_item *stats_item;
+	proto_tree *stats_tree;
+
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
+
+	/* Sent from chip to host */
+	col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
+	col_set_str(pinfo->cinfo, COL_RES_DL_DST, "host");
+
+	/* Display previous item as tree header */
+	stats_item = proto_tree_add_item(tree, hf_h4bcm_type, tvb, offset-1, 1, ENC_NA);
+
+	/* Make stats subtree */
+	stats_tree = proto_item_add_subtree(stats_item, ett_h4bcm_acl_br_stats);
+
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_null_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_poll_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dv_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_aux1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm3_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh3_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm5_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh5_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_null_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_poll_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dv_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_aux1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm3_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh3_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm5_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dh5_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	/* FIXME within the next 16 bytes, some are 4 bytes long ... not 100% sure which */
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_rx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_tx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_hec_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_crc_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_seqn_rep, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_soft_rst, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_rx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+}
+
+/* ACL EDR stats */
+void
+dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+
+{
+	proto_item *stats_item;
+	proto_tree *stats_tree;
+
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
+
+	/* Sent from chip to host */
+	col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
+	col_set_str(pinfo->cinfo, COL_RES_DL_DST, "host");
+
+	/* Display previous item as tree header */
+	stats_item = proto_tree_add_item(tree, hf_h4bcm_type, tvb, offset-1, 1, ENC_NA);
+
+	/* Make stats subtree */
+	stats_tree = proto_item_add_subtree(stats_item, ett_h4bcm_acl_edr_stats);
+
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_null_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_poll_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh1_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh3_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh3_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh5_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh5_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_null_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_poll_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_dm1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh1_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh3_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh3_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_2dh5_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh5_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	/* FIXME within the next 16 bytes, some are 4 bytes long ... not 100% sure which */
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_rx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_tx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_hec_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_crc_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_seqn_rep, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_soft_rst, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_rx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+}
+
+/* Show if LM + LM LE logging was enabled or disabled */
+void
+dissect_lm_toggle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+{
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) >= 1);
+
+	/* Sent from host UART to chip */
+	col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "host");
+	col_set_str(pinfo->cinfo, COL_RES_DL_DST, "controller");
+
+	/* OFF and ON */
+	proto_tree_add_item(tree, hf_h4bcm_lm_toggle, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+}
 
 /* dissect a packet */
 static int
@@ -334,16 +592,14 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	proto_tree *h4bcm_tree, *type_tree;
 	int offset;
 	int h4bcm_type;
-    
-	/* Avoid error: 'type' may be used uninitialized in this function */
-	guint8 type = 0xff;
 
 	/* sanity check: length */
-	if (tvb_reported_length(tvb) < 63)
+	if (tvb_reported_length(tvb) <= 1)
 		/* bad length: look for a different dissector */
 		return 0;
-
-	/* maybe should verify HEC */
+	
+	
+	/* fprintf(stderr, "total len %d\n", tvb_reported_length(tvb)); */
 
 	/* make entries in protocol column and info column on summary display */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "HCI H4 Broadcom");
@@ -352,10 +608,6 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	offset = 0;
 	h4bcm_item = proto_tree_add_item(tree, proto_h4bcm, tvb, offset, -1, ENC_NA);
 	h4bcm_tree = proto_item_add_subtree(h4bcm_item, ett_h4bcm);
-	
-	/* type / opcode */
-	type_item = proto_tree_add_item(h4bcm_tree, hf_h4bcm_type, tvb, offset, 1, ENC_NA);
-	type_tree = proto_item_add_subtree(type_item, ett_h4bcm_type);
 		
 	h4bcm_type = tvb_get_guint8(tvb, offset);
 	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(h4bcm_type, h4bcm_types, "Unknown Type (%d)"));
@@ -372,6 +624,12 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 		offset += 11;
 		dissect_lmp(tvb, pinfo, h4bcm_tree, offset);
 		break;
+	case DIA_ACL_BR_RESP:
+		dissect_acl_br_stats(tvb, pinfo, h4bcm_tree, offset);
+		break;
+	case DIA_ACL_EDR_RESP:
+		dissect_acl_edr_stats(tvb, pinfo, h4bcm_tree, offset);
+		break;
 	/* TODO
 	 * 12: Opcode
 	 * 	0: Connection Update Request [and decoding of subvariables]
@@ -385,6 +643,32 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 		break;
 	case DIA_LE_RECV:
 		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 0);
+		break;
+	case DIA_LM_ENABLE:
+		dissect_lm_toggle(tvb, pinfo, h4bcm_tree, offset);
+		break;
+	case DIA_MEM_PEEK_RESP:
+	case DIA_MEM_DUMP_RESP:
+	case DIA_TEST_COMPL:
+	case DIA_MEM_POKE_RESP:
+	case DIA_CPU_LOAD_RESP:
+	case DIA_AUX_RESP:
+	case DIA_ACL_UNKN1_RESP:
+	case DIA_ACL_UNKN2_RESP:
+		dissect_unkn_resp(tvb, pinfo, h4bcm_tree, offset);
+		break;
+	case DIA_ACL_BR_RESET:
+	case DIA_ACL_BR_GET:
+	case DIA_ACL_EDR_GET:
+	case DIA_AUX_GET:
+	case DIA_ACL_UNKN1_GET:
+	case DIA_ACL_UNKN2_GET:
+	case DIA_CON_GET:
+	case DIA_MEM_PEEK_GET:
+	case DIA_MEM_POKE_GET:
+	case DIA_MEM_DUMP_GET:
+	case DIA_PKT_TEST:
+		dissect_unkn_get(tvb, pinfo, h4bcm_tree, offset);
 		break;
 	default:
 		break;
@@ -448,13 +732,224 @@ proto_register_h4bcm(void)
 			FT_BYTES, BASE_NONE, NULL, 0x0,
 			NULL, HFILL }
 		},
+		{ &hf_h4bcm_lm_toggle,
+			{ "LM and LM LE Logging", "h4bcm.logging",
+			FT_BOOLEAN, 8, TFS(&lm_toggle), 0x01,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_null_rcvd,
+			{ "Null Packets Received", "h4bcm.stats.null_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_poll_rcvd,
+			{ "Poll Packets Received", "h4bcm.stats.poll_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm1_rcvd,
+			{ "DM1 Packets Received", "h4bcm.stats.dm1_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh1_rcvd,
+			{ "DH1 Packets Received", "h4bcm.stats.dh1_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dv_rcvd,
+			{ "DV Packets Received", "h4bcm.stats.dv_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_aux1_rcvd,
+			{ "AUX1 Packets Received", "h4bcm.stats.aux1_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm3_rcvd,
+			{ "DM3 Packets Received", "h4bcm.stats.dm3_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh3_rcvd,
+			{ "DH3 Packets Received", "h4bcm.stats.dh3_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm5_rcvd,
+			{ "DM5 Packets Received", "h4bcm.stats.dm5_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh5_rcvd,
+			{ "DH5 Packets Received", "h4bcm.stats.dh5_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_null_tx,
+			{ "Null Packets Transmitted", "h4bcm.stats.null_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_poll_tx,
+			{ "Poll Packets Transmitted", "h4bcm.stats.poll_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm1_tx,
+			{ "DM1 Packets Transmitted", "h4bcm.stats.dm1_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh1_tx,
+			{ "DH1 Packets Transmitted", "h4bcm.stats.dh1_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dv_tx,
+			{ "DV Packets Transmitted", "h4bcm.stats.dv_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_aux1_tx,
+			{ "AUX1 Packets Transmitted", "h4bcm.stats.aux1_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm3_tx,
+			{ "DM3 Packets Transmitted", "h4bcm.stats.dm3_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh3_tx,
+			{ "DH3 Packets Transmitted", "h4bcm.stats.dh3_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dm5_tx,
+			{ "DM5 Packets Transmitted", "h4bcm.stats.dm5_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_dh5_tx,
+			{ "DH5 Packets Transmitted", "h4bcm.stats.dh5_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_acl_rx,
+			{ "Total Received ACL Bytes", "h4bcm.stats.acl_rx",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_acl_tx,
+			{ "Total Transmitted ACL Bytes", "h4bcm.stats.acl_tx",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_hec_err,
+			{ "HEC Errors", "h4bcm.stats.hec_err",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_crc_err,
+			{ "CRC Errors", "h4bcm.stats.crc_err",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_seqn_rep,
+			{ "Seqn Repeat", "h4bcm.stats.seqn_rep",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_soft_rst,
+			{ "Soft Reset", "h4bcm.stats.soft_rst",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_test_tx,
+			{ "TestMode Transmitted Packets", "h4bcm.stats.test_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_test_rx,
+			{ "TestMode Received Packets", "h4bcm.stats.test_rx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_test_err,
+			{ "TestMode Packet Errors", "h4bcm.stats.test_err",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh1_rcvd,
+			{ "2DH1 Packets Received", "h4bcm.stats.2dh1_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh1_rcvd,
+			{ "3DH1 Packets Received", "h4bcm.stats.3dh1_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh3_rcvd,
+			{ "2DH3 Packets Received", "h4bcm.stats.2dh3_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh3_rcvd,
+			{ "3DH3 Packets Received", "h4bcm.stats.3dh3_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh5_rcvd,
+			{ "2DH5 Packets Received", "h4bcm.stats.2dh5_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh5_rcvd,
+			{ "3DH5 Packets Received", "h4bcm.stats.3dh5_rcvd",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh1_tx,
+			{ "2DH1 Packets Transmitted", "h4bcm.stats.2dh1_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh1_tx,
+			{ "3DH1 Packets Transmitted", "h4bcm.stats.3dh1_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh3_tx,
+			{ "2DH3 Packets Transmitted", "h4bcm.stats.2dh3_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh3_tx,
+			{ "3DH3 Packets Transmitted", "h4bcm.stats.3dh3_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_2dh5_tx,
+			{ "2DH5 Packets Transmitted", "h4bcm.stats.2dh5_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_stats_3dh5_tx,
+			{ "3DH5 Packets Transmitted", "h4bcm.stats.3dh5_tx",
+			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
 	};
 
 	/* protocol subtree arrays */
 	static gint *ett[] = {
 		&ett_h4bcm,
-		&ett_h4bcm_type,
 		&ett_h4bcm_pldhdr,
+		&ett_h4bcm_acl_br_stats,
+		&ett_h4bcm_acl_edr_stats,
 	};
 
 	/* register the protocol name and description */
