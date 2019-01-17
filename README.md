@@ -1,4 +1,5 @@
-# Bluetooth H4 Broadcom Wireshark plugin from the InternalBlue project
+Bluetooth H4 Broadcom Wireshark plugin from the InternalBlue project
+====================================================================
 
 This dissector contains vendor specific additions to the serial protocol
 H4, which is used by the operating system's driver to interact with
@@ -11,7 +12,8 @@ Protocol (LMP) and Bluetooth Baseband (BB). The dissectors for LMP and BB were
 updated to be compatible with Wireshark 2.6. Credit for most of the LMP and BB
 dissector goes to the original authors of libbtbb.
 
-# About this repository
+About this repository
+---------------------
 
 This repository contains only the Wireshark dissector without the rest of
 Internalblue. All credit goes to the original authors of InternalBlue. For
@@ -19,15 +21,16 @@ additional information see the original repository:
 
 https://github.com/seemoo-lab/internalblue
 
-# Build and Install
+Build and Install
+-----------------
 
 To build this on Debian/Ubuntu/BackTrack linux distributions:
-  sudo apt-get install wireshark-dev wireshark
-  mkdir build
-  cd build
-  cmake ..
-  make
-  make install
+    sudo apt-get install wireshark-dev wireshark
+    mkdir build
+    cd build
+    cmake ..
+    make
+    make install
 
 This will install to the ~/.local/lib/wireshark/plugins/2.6/epan/ in your home
 directory. To override this set the DESTDIR environment variable when running
