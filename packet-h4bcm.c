@@ -329,7 +329,6 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, mac_string);
 		col_set_str(pinfo->cinfo, COL_RES_DL_DST, "controller");
 	}
-	
 }
 
 /* Pass LMP handling to existing dissector if available */
@@ -373,7 +372,6 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 			}
 		}
 	}
-	
 
 	/* Check that we have a LMP dissector or else just display raw payload */
 	if (btlmp_handle && len != 0) {
@@ -637,6 +635,10 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	 * 	...
 	 * 	12: Version ID
 	 * 	13: Reject Ind 
+	 * 
+	 * Eval board:
+	 * 	LMULP_LcpInfoTable
+	 * 	LMULP_LcpInfoTable_VendorSpecific
 	 */
 	case DIA_LE_SENT:
 		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
@@ -673,15 +675,7 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	default:
 		break;
 	}
-	
-	
-	/* TODO
-	 * Packet Logger still has some decoder details for:
-	 * 0x16 contents
-	 * 0x17 contents
-	 * 
-	 */
-	
+
 	/* Return the amount of data this dissector was able to dissect */
 	return tvb_reported_length(tvb);
 }
