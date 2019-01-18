@@ -117,6 +117,10 @@ static int hf_h4bcm_stats_2dh3_tx = -1;
 static int hf_h4bcm_stats_3dh3_tx = -1;
 static int hf_h4bcm_stats_2dh5_tx = -1;
 static int hf_h4bcm_stats_3dh5_tx = -1;
+static int hf_h4bcm_le_ether = -1;
+static int hf_h4bcm_le_handle = -1;
+static int hf_h4bcm_le_opcode = -1;
+static int hf_h4bcm_le_opcode_ext = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
@@ -269,6 +273,46 @@ static const int lmp_lengths_ext[] = {
 	 3, /* LMP_KEYPRESS_NOTIFICATION */
 	 3, /* LMP_POWER_CONTROL_REQ */
 	 3, /* LMP_POWER_CONTROL_RES */
+};
+
+/* Bluetooth 5.0 specification p. 2589 */
+static const value_string lm_le_opcodes[] = {
+	{ 0x0, "LE LL Connection Update Request" },
+	{ 0x1, "LE LL Channel Map Request" },
+	{ 0x2, "LE LL Terminate Indication" },
+	{ 0x3, "LE LL Encryption Request" },
+	{ 0x4, "LE LL Encryption Response" },
+	{ 0x5, "LE LL Start Encryption Request" },
+	{ 0x6, "LE LL Start Encryption Response" },
+	{ 0x7, "LE LL Unknown Response" },
+	{ 0x8, "LE LL Feature Request" },
+	{ 0x9, "LE LL Feature Response" },
+	{ 0xa, "LE LL Pause Encryption Request" },
+	{ 0xb, "LE LL Pause Encryption Response" },
+	{ 0xc, "LE LL Version Indication" },
+	{ 0xd, "LE LL Reject Indication" },
+	{ 0xe, "LE LL Slave Feture Request" },
+	{ 0xf, "LE LL Connection Parameter Request" },
+	{ 0x10, "LE LL Connection Parameter Response" },
+	{ 0x11, "LE LL Extended Reject Indication" },
+	{ 0x12, "LE LL Ping Request" },
+	{ 0x13, "LE LL Ping Response" },
+	{ 0x14, "LE LL Length Request" },
+	{ 0x15, "LE LL Length Response" },
+	{ 0x16, "LE LL Update Indication" },
+	{ 0x17, "LE LL Physical Layers Request" },
+	{ 0x18, "LE LL Physical Layers Response" },
+	{ 0x19, "LE LL Minimum Number of Used Channels Indication" },
+	{ 0xff, "LE LL Broadcom Vendor Specific" },
+	{ 0, NULL }
+};
+
+static const value_string lm_le_opcodes_ext[] = {
+	{ 0x1, "LE LL Vendor Specific Feature Request" },
+	{ 0x2, "LE LL Vendor Specific Feature Response" },
+	{ 0x3, "LE LL Vendor Specific Enable Bcs Timeline" },
+	{ 0x4, "LE LL Random Address Change" },
+	{ 0, NULL }
 };
 
 static const true_false_string lm_toggle = {
@@ -493,7 +537,6 @@ dissect_acl_br_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int of
 /* ACL EDR stats */
 void
 dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
-
 {
 	proto_item *stats_item;
 	proto_tree *stats_tree;
@@ -567,6 +610,67 @@ dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
 	offset += 2;
 }
 
+/* LM LE
+ * Most of this is already implemented in "btle" in Wireshark...
+ * But somewhat different format :( So we do it here.
+ */
+void
+dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int is_sent)
+{
+	int opcode;
+	int opcode_ext;
+	guint64 mac;
+	gchar *mac_string = (gchar *)g_malloc(18);
+	
+	/* LMP and LCP are only transmitted within full diagnostic reports */
+	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
+	
+	/* clock of the BT master */
+	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+
+	/* standard MAC address this time */
+	mac = tvb_get_guint64(tvb, offset-2, ENC_BIG_ENDIAN);
+	g_snprintf(mac_string, 18,
+		"%02x:%02x:%02x:%02x:%02x:%02x",
+		(mac & 0xff0000000000) >>40,
+		(mac & 0x00ff00000000) >>32,
+		(mac & 0x0000ff000000) >>24,
+		(mac & 0x000000ff0000) >>16,
+		(mac & 0x00000000ff00) >> 8,
+		(mac & 0x0000000000ff));
+	proto_tree_add_item(tree, hf_h4bcm_le_ether, tvb, offset, 6, ENC_LITTLE_ENDIAN);
+	offset += 6;
+
+	if (is_sent == 1) {
+		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
+		col_set_str(pinfo->cinfo, COL_RES_DL_DST, mac_string);
+	} else {
+		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, mac_string);
+		col_set_str(pinfo->cinfo, COL_RES_DL_DST, "controller");
+	}
+
+	/* Handle (only 1 byte, even though it can be 2 bytes long?!) */
+	proto_tree_add_item(tree, hf_h4bcm_le_handle, tvb, offset, 1, ENC_NA);
+	offset += 1;
+	
+	opcode = tvb_get_guint8(tvb, offset);
+	proto_tree_add_item(tree, hf_h4bcm_le_opcode, tvb, offset, 1, ENC_NA);
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(opcode,
+			lm_le_opcodes, "LE LL Unknown Opcode (%d)"));
+	offset += 1;
+
+	/* Broadcom vendor specific stuff... */
+	if (opcode == 0xff) {
+		opcode_ext = tvb_get_guint8(tvb, offset);
+		proto_tree_add_item(tree, hf_h4bcm_le_opcode_ext, tvb, offset, 1, ENC_NA);
+		col_add_str(pinfo->cinfo, COL_INFO, val_to_str(opcode_ext,
+			lm_le_opcodes_ext, "LE LL Unknown VSC Opcode (%d)"));
+		offset += 1;
+	}
+	
+}
+
 /* Show if LM + LM LE logging was enabled or disabled */
 void
 dissect_lm_toggle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
@@ -628,23 +732,11 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	case DIA_ACL_EDR_RESP:
 		dissect_acl_edr_stats(tvb, pinfo, h4bcm_tree, offset);
 		break;
-	/* TODO
-	 * 12: Opcode
-	 * 	0: Connection Update Request [and decoding of subvariables]
-	 * 	1: Channel Map Request [and decoding of subvariables]
-	 * 	...
-	 * 	12: Version ID
-	 * 	13: Reject Ind 
-	 * 
-	 * Eval board:
-	 * 	LMULP_LcpInfoTable
-	 * 	LMULP_LcpInfoTable_VendorSpecific
-	 */
 	case DIA_LE_SENT:
-		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
+		dissect_lm_le(tvb, pinfo, h4bcm_tree, offset, 1);
 		break;
 	case DIA_LE_RECV:
-		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 0);
+		dissect_lm_le(tvb, pinfo, h4bcm_tree, offset, 0);
 		break;
 	case DIA_LM_ENABLE:
 		dissect_lm_toggle(tvb, pinfo, h4bcm_tree, offset);
@@ -934,6 +1026,26 @@ proto_register_h4bcm(void)
 		{ &hf_h4bcm_stats_3dh5_tx,
 			{ "3DH5 Packets Transmitted", "h4bcm.stats.3dh5_tx",
 			FT_UINT16, BASE_DEC, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_le_ether,
+			{ "Remote MAC Address", "h4bcm.le.address",
+			FT_BYTES, SEP_COLON, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_le_handle,
+			{ "Handle", "h4bcm.le.handle",
+			FT_UINT8, BASE_HEX, NULL, 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_le_opcode,
+			{ "Opcode", "h4bcm.le.opcode",
+			FT_UINT8, BASE_HEX, VALS(lm_le_opcodes), 0x0,
+			NULL, HFILL }
+		},
+		{ &hf_h4bcm_le_opcode_ext,
+			{ "Broadcom Specific Opcode", "h4bcm.le.opcodeext",
+			FT_UINT8, BASE_HEX, VALS(lm_le_opcodes_ext), 0x0,
 			NULL, HFILL }
 		},
 	};

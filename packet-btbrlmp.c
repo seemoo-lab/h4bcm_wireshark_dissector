@@ -2681,6 +2681,28 @@ static gint ett_lmp_features = -1;
 static gint ett_lmp_featuresext = -1;
 
 /* LMP PDUs with short opcodes */
+void
+dissect_vsc(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
+{
+	/* TODO implement Broadcom VSC opcodes here:
+	 * 0: Features Request
+	 * 1: Features Response
+	 * 	0 and 1: Features: 0x%02X%02X%02X%02X
+	 * 2: Not Accept
+	 * 	Rejection BPCS Opcode: 0x%02X
+	 * 	Rejection Error Code: 0x%02X
+	 * 3: BFC Suspend
+	 * 4: BFC Resume Request
+	 * 	if receive direction:
+	 * 		BFC Resume Response (instead)
+	 * 	BFC Link State: 0x%02X
+	 * 	BFC Stack State: 0x%02X
+	 * 	BFC Reserved: 0x%02X\
+	 * 5: BFC Accept
+	 * 	BPCS Accepted Opcode: 0x%02X
+	 * 	
+	 */
+}
 
 void
 dissect_name_req(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
