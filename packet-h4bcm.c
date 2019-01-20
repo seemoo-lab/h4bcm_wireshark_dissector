@@ -696,7 +696,7 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	int h4bcm_type;
 
 	/* sanity check: length */
-	if (tvb_reported_length(tvb) <= 1)
+	if (tvb_reported_length(tvb) < 1)
 		/* bad length: look for a different dissector */
 		return 0;
 	
