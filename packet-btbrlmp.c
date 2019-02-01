@@ -3430,7 +3430,7 @@ dissect_test_control(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 	DISSECTOR_ASSERT(len == 10);
 	DISSECTOR_ASSERT(tvb_reported_length_remaining(tvb, offset) >= 9);
 
-    proto_tree_add_uint(tree, hf_lmp_testscen, tvb, offset, 1, tvb_get_guint8(tvb, offset) ^ 0x55);
+	proto_tree_add_uint(tree, hf_lmp_testscen, tvb, offset, 1, tvb_get_guint8(tvb, offset) ^ 0x55);
 	offset += 1;
 
 	proto_tree_add_uint(tree, hf_lmp_hopmode, tvb, offset, 1, tvb_get_guint8(tvb, offset) ^ 0x55);

@@ -32,7 +32,6 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <string.h>
-#include <stdio.h> //TODO remove
 
 /* type definitions for Broadcom diagnostics */
 #define DIA_LM_SENT			0x00
@@ -47,6 +46,7 @@
 #define DIA_AUX_RESP			0x18
 #define DIA_ACL_UNKN1_RESP		0x1a
 #define DIA_ACL_UNKN2_RESP		0x1b
+#define DIA_CON_RESP			0x1f
 #define DIA_LE_SENT			0x80
 #define DIA_LE_RECV			0x81
 #define DIA_ACL_BR_RESET		0xb9
@@ -121,6 +121,9 @@ static int hf_h4bcm_le_ether = -1;
 static int hf_h4bcm_le_handle = -1;
 static int hf_h4bcm_le_opcode = -1;
 static int hf_h4bcm_le_opcode_ext = -1;
+static int hf_h4bcm_ll_version_ind_versnr = -1;
+static int hf_h4bcm_ll_version_ind_compid = -1;
+static int hf_h4bcm_ll_version_ind_subversnr = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
@@ -145,6 +148,7 @@ static const value_string h4bcm_types[] = {
 	{ DIA_AUX_RESP, "Received Aux Response" },
 	{ DIA_ACL_UNKN1_RESP, "ACL Stats Data (Type 0x1A)" },
 	{ DIA_ACL_UNKN2_RESP, "ACL Stats Data (Type 0x1B)" },
+	{ DIA_CON_RESP, "Get Connection Response" },
 	{ DIA_LE_SENT, "LE LM Sent" },				// Low Energy LL Control PDU LMP Message
 	{ DIA_LE_RECV, "LE LM Received" },
 	{ DIA_ACL_BR_RESET, "Reset Basic Rate ACL Stats" },	// memclr(DHM_ACLPktStats)
@@ -571,6 +575,7 @@ dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
 	offset += 2;
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh5_rcvd, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
+	offset += 2; /* with this offset, null packets match */
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_null_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_poll_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -589,7 +594,7 @@ dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
 	offset += 2;
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_3dh5_tx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
-	/* FIXME within the next 16 bytes, some are 4 bytes long ... not 100% sure which */
+	offset += 2; /* with this offset, acl bytes are correct */
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_rx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_acl_tx, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -608,6 +613,20 @@ dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
 	offset += 2;
 	proto_tree_add_item(stats_tree, hf_h4bcm_stats_test_err, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
+}
+
+/* LL_VERSION_IND p. 2594 
+ */
+void
+dissect_ll_version_ind(proto_tree *tree, tvbuff_t *tvb, int offset)
+{
+	proto_tree_add_item(tree, hf_h4bcm_ll_version_ind_versnr, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	offset += 1;
+
+	proto_tree_add_item(tree, hf_h4bcm_ll_version_ind_compid, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+
+	proto_tree_add_item(tree, hf_h4bcm_ll_version_ind_subversnr, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 }
 
 /* LM LE
@@ -660,15 +679,21 @@ dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
 			lm_le_opcodes, "LE LL Unknown Opcode (%d)"));
 	offset += 1;
 
+	switch (opcode) {
+	case 0x0c:
+		dissect_ll_version_ind(tree, tvb, offset);
+		break;
 	/* Broadcom vendor specific stuff... */
-	if (opcode == 0xff) {
+	case 0xff:
 		opcode_ext = tvb_get_guint8(tvb, offset);
 		proto_tree_add_item(tree, hf_h4bcm_le_opcode_ext, tvb, offset, 1, ENC_NA);
 		col_add_str(pinfo->cinfo, COL_INFO, val_to_str(opcode_ext,
-			lm_le_opcodes_ext, "LE LL Unknown VSC Opcode (%d)"));
+		lm_le_opcodes_ext, "LE LL Unknown VSC Opcode (%d)"));
 		offset += 1;
+		break;
+	default:
+		break;
 	}
-	
 }
 
 /* Show if LM + LM LE logging was enabled or disabled */
@@ -1047,6 +1072,21 @@ proto_register_h4bcm(void)
 			{ "Broadcom Specific Opcode", "h4bcm.le.opcodeext",
 			FT_UINT8, BASE_HEX, VALS(lm_le_opcodes_ext), 0x0,
 			NULL, HFILL }
+		},
+		{ &hf_h4bcm_ll_version_ind_versnr,
+			{ "VersNr", "h4bcm.le.versnr",
+			FT_UINT8, BASE_HEX, NULL, 0x0,
+			"Version", HFILL }
+		},
+		{ &hf_h4bcm_ll_version_ind_subversnr,
+			{ "SubVersNr", "h4bcm.le.subversnr",
+			FT_UINT16, BASE_HEX, NULL, 0x0,
+			"Subversion", HFILL }
+		},
+		{ &hf_h4bcm_ll_version_ind_compid,
+			{ "CompID", "h4bcm.le.compid",
+			FT_UINT16, BASE_HEX, NULL, 0x0,
+			"Company", HFILL }
 		},
 	};
 
