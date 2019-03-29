@@ -25,7 +25,7 @@ Build and Install
 -----------------
 
 To build this on Debian/Ubuntu/BackTrack linux distributions:
-    sudo apt-get install wireshark-dev wireshark
+    sudo apt-get install wireshark-dev wireshark cmake
     mkdir build
     cd build
     cmake ..
