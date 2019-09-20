@@ -13,6 +13,6 @@
 #endif
 
 /* Version number of package */
-#define PLUGIN_VERSION "0.0.1"
-#define PLUGIN_RELEASE "2.6"
+#define PLUGIN_VERSION "0.0.2"
+#define PLUGIN_RELEASE "3.0"
 

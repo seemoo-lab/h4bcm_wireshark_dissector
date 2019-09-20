@@ -23,12 +23,12 @@
 
 project(h4bcm-wireshark-plugin C)
 
-cmake_minimum_required(VERSION 2.6)
-set(CMAKE_BACKWARDS_COMPATIBILITY 2.6)
+cmake_minimum_required(VERSION 3.0)
+set(CMAKE_BACKWARDS_COMPATIBILITY 3.0)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 IF ( NOT CMAKE_INSTALL_LIBDIR )
-  set(CMAKE_INSTALL_LIBDIR ~/.local/lib/wireshark/plugins/2.6/epan)
+  set(CMAKE_INSTALL_LIBDIR ~/.local/lib/wireshark/plugins/3.0/epan)
 ENDIF ( NOT CMAKE_INSTALL_LIBDIR )
 MESSAGE (STATUS "Plugin will be installed in: ${CMAKE_INSTALL_LIBDIR}")
 

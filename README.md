@@ -9,7 +9,7 @@ diagnostic protocol using the H4 serial data type 0x07.
 
 Subprotocols inside Broadcom's diagnostic protocol include the Link Management
 Protocol (LMP) and Bluetooth Baseband (BB). The dissectors for LMP and BB were
-updated to be compatible with Wireshark 2.6. Credit for most of the LMP and BB
+updated to be compatible with Wireshark 3.0. Credit for most of the LMP and BB
 dissector goes to the original authors of libbtbb.
 
 About this repository
@@ -34,7 +34,7 @@ To build this on Debian/Ubuntu/BackTrack linux distributions:
     make
     make install
 
-This will install to the ~/.local/lib/wireshark/plugins/2.6/epan/ in your home
+This will install to the ~/.local/lib/wireshark/plugins/3.0/epan/ in your home
 directory. To override this set the DESTDIR environment variable when running
 cmake.
 

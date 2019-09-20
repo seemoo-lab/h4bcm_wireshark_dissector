@@ -103,7 +103,6 @@ reg_code += preamble
 
 reg_code += """
 #include "config.h"
-#include "moduleinfo.h"
 
 #include <gmodule.h>
 
@@ -118,7 +117,7 @@ if registertype == "plugin":
 if registertype == "plugin_wtap":
     reg_code += "#include \"wiretap/wtap.h\"\n\n"
 if registertype == "plugin_codec":
-    reg_code += "#include \"codecs/codecs.h\"\n\n"
+    reg_code += "#include \"wsutil/codecs.h\"\n\n"
 
 for symbol in regs['proto_reg']:
     reg_code += "void proto_register_%s(void);\n" % (symbol)
@@ -129,9 +128,11 @@ for symbol in regs['wtap_register']:
 for symbol in regs['codec_register']:
     reg_code += "void codec_register_%s(void);\n" % (symbol)
 
+# FIXME should not be hardcoded here but actually come from moduleinfo.h ...
 reg_code += """
-WS_DLL_PUBLIC_DEF const gchar plugin_version[] = PLUGIN_VERSION;
-WS_DLL_PUBLIC_DEF const gchar plugin_release[] = VERSION_RELEASE;
+WS_DLL_PUBLIC_DEF const gchar plugin_version[] = "0.0.2";
+WS_DLL_PUBLIC_DEF const int plugin_want_major = VERSION_MAJOR;
+WS_DLL_PUBLIC_DEF const int plugin_want_minor = VERSION_MINOR;
 
 WS_DLL_PUBLIC void plugin_register(void);
 
@@ -162,15 +163,15 @@ if registertype == "plugin_codec":
 reg_code += "}\n"
 
 try:
-    print(('Updating ' + final_filename))
     fh = open(final_filename, 'w')
     fh.write(reg_code)
     fh.close()
+    print('Generated {} for {}.'.format(final_filename, os.path.basename(srcdir)))
 except OSError:
     sys.exit('Unable to write ' + final_filename + '.\n')
 
 #
-# Editor modelines  -  http://www.wireshark.org/tools/modelines.html
+# Editor modelines  -  https://www.wireshark.org/tools/modelines.html
 #
 # Local variables:
 # c-basic-offset: 4
