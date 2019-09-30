@@ -103,6 +103,7 @@ reg_code += preamble
 
 reg_code += """
 #include "config.h"
+#include "wireshark/config.h"
 
 #include <gmodule.h>
 
