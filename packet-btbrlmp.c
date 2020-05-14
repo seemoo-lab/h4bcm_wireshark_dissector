@@ -4218,7 +4218,7 @@ proto_register_btbrlmp(void)
 		},
 		{ &hf_lmp_authreqs,
 			{ "Authentication Requirements", "btbrlmp.authreqs",
-			FT_UINT8, BASE_HEX, VALS(auth_requirements), 0xf0,
+			FT_UINT8, BASE_HEX, VALS(auth_requirements), 0x00,
 			NULL, HFILL }
 		},
 		{ &hf_lmp_authres,
@@ -4955,7 +4955,7 @@ proto_register_btbrlmp(void)
 		},
 		{ &hf_lmp_oobauthdata,
 			{ "OOB Authentication Data", "btbrlmp.oobauthdata",
-			FT_UINT8, BASE_DEC, VALS(oob_auth_data), 0xfe,
+			FT_UINT8, BASE_DEC, VALS(oob_auth_data), 0x00,
 			NULL, HFILL }
 		},
 		{ &hf_lmp_op,
