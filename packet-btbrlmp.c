@@ -21,13 +21,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#else
-#include <wireshark/config.h>
-#endif
 
-#include <wireshark/config.h> /* needed for epan/gcc-4.x */
 #include <epan/packet.h>
 #include <epan/prefs.h>
 

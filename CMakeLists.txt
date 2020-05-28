@@ -1,50 +1,16 @@
 # CMakeLists.txt
 #
-# $Id: CMakeLists.txt 31995 2010-02-24 22:32:10Z jmayer $
-#
 # Wireshark - Network traffic analyzer
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 
-project(h4bcm-wireshark-plugin C)
+include(WiresharkPlugin)
 
-cmake_minimum_required(VERSION 3.0)
-set(CMAKE_BACKWARDS_COMPATIBILITY 3.0)
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-
-IF ( NOT CMAKE_INSTALL_LIBDIR )
-  set(CMAKE_INSTALL_LIBDIR ~/.local/lib/wireshark/plugins/3.0/epan)
-ENDIF ( NOT CMAKE_INSTALL_LIBDIR )
-MESSAGE (STATUS "Plugin will be installed in: ${CMAKE_INSTALL_LIBDIR}")
-
-INCLUDE(UseMakePluginReg)
-  
-set(GLIB2_MIN_VERSION 2.4.0)
-
-find_package(GLIB2)
-include_directories (${GLIB2_INCLUDE_DIRS})
-
-find_package(Wireshark)
-include_directories (${WIRESHARK_INCLUDE_DIRS})
-
-set(LINK_MODE_LIB SHARED)
-set(LINK_MODE_MODULE MODULE)
-
+# Plugin name and version info (major minor micro extra)
+set_module_info(h4bcm 1 1 0 0)
 
 set(DISSECTOR_SRC
 	packet-h4bcm.c
@@ -56,17 +22,11 @@ set(PLUGIN_FILES
 	${DISSECTOR_SRC}
 )
 
-set(CLEAN_FILES
+set_source_files_properties(
 	${PLUGIN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
 )
-
-if (WERROR)
-	set_source_files_properties(
-		${CLEAN_FILES}
-		PROPERTIES
-		COMPILE_FLAGS -Werror
-	)
-endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -75,15 +35,32 @@ register_plugin_files(plugin.c
 	${DISSECTOR_SRC}
 )
 
-add_library(h4bcm ${LINK_MODE_MODULE}
-	${PLUGIN_FILES}
+add_plugin_library(h4bcm epan)
+
+target_link_libraries(h4bcm epan)
+
+install_plugin(h4bcm epan)
+
+file(GLOB DISSECTOR_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.h")
+CHECKAPI(
+	NAME
+	  h4bcm
+	SWITCHES
+	  -g abort -g termoutput -build
+	SOURCES
+	  ${DISSECTOR_SRC}
+	  ${DISSECTOR_HEADERS}
 )
-set_target_properties(h4bcm PROPERTIES PREFIX "")
-set_target_properties(h4bcm PROPERTIES LINK_FLAGS "${WS_LINK_FLAGS}")
 
-target_link_libraries(h4bcm wireshark)
-
-install(TARGETS h4bcm
-	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/ NAMELINK_SKIP
-)
-
+#
+# Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+#
+# Local variables:
+# c-basic-offset: 8
+# tab-width: 8
+# indent-tabs-mode: t
+# End:
+#
+# vi: set shiftwidth=8 tabstop=8 noexpandtab:
+# :indentSize=8:tabSize=8:noTabs=false:
+#
