@@ -1,0 +1,4 @@
+{
+    "cmake.configureOnOpen": true,
+    "workbench.editor.enablePreview": false
+}
