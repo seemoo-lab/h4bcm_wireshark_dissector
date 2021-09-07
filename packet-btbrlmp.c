@@ -21,13 +21,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#else
-#include <wireshark/config.h>
-#endif
 
-#include <wireshark/config.h> /* needed for epan/gcc-4.x */
 #include <epan/packet.h>
 #include <epan/prefs.h>
 
@@ -4218,7 +4213,7 @@ proto_register_btbrlmp(void)
 		},
 		{ &hf_lmp_authreqs,
 			{ "Authentication Requirements", "btbrlmp.authreqs",
-			FT_UINT8, BASE_HEX, VALS(auth_requirements), 0xf0,
+			FT_UINT8, BASE_HEX, VALS(auth_requirements), 0x00,
 			NULL, HFILL }
 		},
 		{ &hf_lmp_authres,
@@ -4955,7 +4950,7 @@ proto_register_btbrlmp(void)
 		},
 		{ &hf_lmp_oobauthdata,
 			{ "OOB Authentication Data", "btbrlmp.oobauthdata",
-			FT_UINT8, BASE_DEC, VALS(oob_auth_data), 0xfe,
+			FT_UINT8, BASE_DEC, VALS(oob_auth_data), 0x00,
 			NULL, HFILL }
 		},
 		{ &hf_lmp_op,
