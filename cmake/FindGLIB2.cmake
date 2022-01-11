@@ -1,238 +1,213 @@
 #
-# $Id: FindGLIB2.cmake 34248 2010-09-25 15:38:12Z jmayer $
-#
-# - Try to find GLib2
+# - Try to find the GLIB2 libraries
 # Once done this will define
 #
-#  GLIB2_FOUND - system has GLib2
-#  GLIB2_INCLUDE_DIRS - the GLib2 include directory
-#  GLIB2_LIBRARIES - Link these to use GLib2
+#  GLIB2_FOUND           - system has glib2
+#  GLIB2_INCLUDE_DIRS    - the glib2 include directory
+#  GLIB2_LIBRARIES       - glib2 library
+#  GLIB2_DLL_DIR_DEBUG   - (Windows) Path to required GLib2 DLLs in debug build.
+#  GLIB2_DLL_DIR_RELEASE - (Windows) Path to required GLib2 DLLs in release builds.
+#  GLIB2_DLLS_DEBUG      - (Windows) List of required GLib2 DLLs in debug builds.
+#  GLIB2_DLLS_RELEASE    - (Windows) List of required GLib2 DLLs in release builds.
+
+# Copyright (c) 2008 Laurent Montel, <montel@kde.org>
 #
-#  HAVE_GLIB_GREGEX_H  glib has gregex.h header and 
-#                      supports g_regex_match_simple
-#
-#  Copyright (c) 2006 Andreas Schneider <mail@cynapses.org>
-#  Copyright (c) 2006 Philippe Bernery <philippe.bernery@gmail.com>
-#  Copyright (c) 2007 Daniel Gollub <gollub@b1-systems.de>
-#  Copyright (c) 2007 Alban Browaeys <prahal@yahoo.com>
-#  Copyright (c) 2008 Michael Bell <michael.bell@web.de>
-#  Copyright (c) 2008-2009 Bjoern Ricks <bjoern.ricks@googlemail.com>
-#
-#  Redistribution and use is allowed according to the terms of the New
-#  BSD license.
-#  For details see the accompanying COPYING-CMAKE-SCRIPTS file.
-#
+# Redistribution and use is allowed according to the terms of the BSD license.
+# For details see the accompanying COPYING-CMAKE-SCRIPTS file.
 
 
-IF (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS )
-  # in cache already
-  SET(GLIB2_FOUND TRUE)
-ELSE (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS )
+if( GLIB2_MAIN_INCLUDE_DIR AND GLIB2_LIBRARIES )
+	# Already in cache, be silent
+	set( GLIB2_FIND_QUIETLY TRUE )
+endif()
 
-  INCLUDE(FindPkgConfig)
+include( FindWSWinLibs )
+FindWSWinLibs( "vcpkg-export-*" "GLIB2_HINTS" )
 
-  ## Glib
-  IF ( GLIB2_FIND_REQUIRED )
-    SET( _pkgconfig_REQUIRED "REQUIRED" )
-  ELSE ( GLIB2_FIND_REQUIRED )
-    SET( _pkgconfig_REQUIRED "" )
-  ENDIF ( GLIB2_FIND_REQUIRED )
+if (NOT WIN32)
+	find_package(PkgConfig)
+	pkg_search_module( PC_GLIB2 glib-2.0 )
+endif()
 
-  IF ( GLIB2_MIN_VERSION )
-    PKG_SEARCH_MODULE( GLIB2 ${_pkgconfig_REQUIRED} glib-2.0>=${GLIB2_MIN_VERSION} )
-  ELSE ( GLIB2_MIN_VERSION )
-    PKG_SEARCH_MODULE( GLIB2 ${_pkgconfig_REQUIRED} glib-2.0 )
-  ENDIF ( GLIB2_MIN_VERSION )
-  IF ( PKG_CONFIG_FOUND )
-    IF ( GLIB2_FOUND )
-      SET ( GLIB2_CORE_FOUND TRUE )
-    ELSE ( GLIB2_FOUND )
-      SET ( GLIB2_CORE_FOUND FALSE )
-    ENDIF ( GLIB2_FOUND )
-  ENDIF ( PKG_CONFIG_FOUND )
+find_path( GLIB2_MAIN_INCLUDE_DIR
+	NAMES
+		glib.h
+	HINTS
+		"${PC_GLIB2_INCLUDEDIR}"
+		"${GLIB2_HINTS}/include"
+	PATH_SUFFIXES
+		glib-2.0
+		glib-2.0/include
+	PATHS
+		/opt/gnome/include
+		/opt/local/include
+		/sw/include
+		/usr/include
+		/usr/local/include
+)
 
-  # Look for glib2 include dir and libraries w/o pkgconfig
-  IF ( NOT GLIB2_FOUND AND NOT PKG_CONFIG_FOUND )
-    FIND_PATH(
-      _glibconfig_include_DIR
-    NAMES
-      glibconfig.h
-    PATHS
-      /opt/gnome/lib64
-      /opt/gnome/lib
-      /opt/lib/
-      /opt/local/lib
-      /sw/lib/
-      /usr/lib64
-      /usr/lib
-      /usr/local/include
-      ${CMAKE_LIBRARY_PATH}
-    PATH_SUFFIXES
-      glib-2.0/include
-    )
+include(FindWSLibrary)
+FindWSLibrary( GLIB2_LIBRARY
+	NAMES
+		glib-2.0
+		libglib-2.0
+	HINTS
+		"${PC_GLIB2_LIBDIR}"
+	WIN32_HINTS
+	    ${GLIB2_HINTS}
+	PATHS
+		/opt/gnome/lib64
+		/opt/gnome/lib
+		/opt/lib/
+		/opt/local/lib
+		/sw/lib/
+		/usr/lib64
+		/usr/lib
+)
 
-    FIND_PATH(
-      _glib2_include_DIR
-    NAMES
-      glib.h
-    PATHS
-      /opt/gnome/include
-      /opt/local/include
-      /sw/include
-      /usr/include
-      /usr/local/include
-    PATH_SUFFIXES
-      glib-2.0
-    )
+# search the glibconfig.h include dir under the same root where the library is found
+get_filename_component( glib2LibDir "${GLIB2_LIBRARY}" PATH)
 
-    #MESSAGE(STATUS "Glib headers: ${_glib2_include_DIR}")
+find_path( GLIB2_INTERNAL_INCLUDE_DIR
+	NAMES
+		glibconfig.h
+	HINTS
+		"${GLIB2_INCLUDEDIR}"
+		"${GLIB2_HINTS}/include"
+		"${glib2LibDir}"
+		${CMAKE_SYSTEM_LIBRARY_PATH}
+	PATH_SUFFIXES
+		glib-2.0/include
+	PATHS
+		${GLIB2_LIBRARY}
 
-    FIND_LIBRARY(
-      _glib2_link_DIR
-    NAMES
-      glib-2.0
-      glib
-    PATHS
-      /opt/gnome/lib
-      /opt/local/lib
-      /sw/lib
-      /usr/lib
-      /usr/local/lib
-    )
-    IF ( _glib2_include_DIR AND _glib2_link_DIR )
-        SET ( _glib2_FOUND TRUE )
-    ENDIF ( _glib2_include_DIR AND _glib2_link_DIR )
+)
 
+if(PC_GLIB2_VERSION)
+	set(GLIB2_VERSION ${PC_GLIB2_VERSION})
+elseif(GLIB2_INTERNAL_INCLUDE_DIR)
+	# On systems without pkg-config (e.g. Windows), search its header
+	# (available since the initial commit of GLib).
+	file(STRINGS ${GLIB2_INTERNAL_INCLUDE_DIR}/glibconfig.h GLIB_MAJOR_VERSION
+		REGEX "#define[ ]+GLIB_MAJOR_VERSION[ ]+[0-9]+")
+	string(REGEX MATCH "[0-9]+" GLIB_MAJOR_VERSION ${GLIB_MAJOR_VERSION})
+	file(STRINGS ${GLIB2_INTERNAL_INCLUDE_DIR}/glibconfig.h GLIB_MINOR_VERSION
+		REGEX "#define[ ]+GLIB_MINOR_VERSION[ ]+[0-9]+")
+	string(REGEX MATCH "[0-9]+" GLIB_MINOR_VERSION ${GLIB_MINOR_VERSION})
+	file(STRINGS ${GLIB2_INTERNAL_INCLUDE_DIR}/glibconfig.h GLIB_MICRO_VERSION
+		REGEX "#define[ ]+GLIB_MICRO_VERSION[ ]+[0-9]+")
+	string(REGEX MATCH "[0-9]+" GLIB_MICRO_VERSION ${GLIB_MICRO_VERSION})
+	set(GLIB2_VERSION ${GLIB_MAJOR_VERSION}.${GLIB_MINOR_VERSION}.${GLIB_MICRO_VERSION})
+else()
+	# When using VERSION_VAR it must be set to a valid value or undefined to
+	# mean "not found". It's not enough to use the empty string or any other CMake false boolean.
+	unset(GLIB2_VERSION)
+endif()
 
-    IF ( _glib2_FOUND )
-        SET ( GLIB2_INCLUDE_DIRS ${_glib2_include_DIR} ${_glibconfig_include_DIR} )
-        SET ( GLIB2_LIBRARIES ${_glib2_link_DIR} )
-        SET ( GLIB2_CORE_FOUND TRUE )
-    ELSE ( _glib2_FOUND )
-        SET ( GLIB2_CORE_FOUND FALSE )
-    ENDIF ( _glib2_FOUND )
+include( FindPackageHandleStandardArgs )
+find_package_handle_standard_args( GLIB2
+	REQUIRED_VARS   GLIB2_LIBRARY GLIB2_MAIN_INCLUDE_DIR GLIB2_INTERNAL_INCLUDE_DIR
+	VERSION_VAR     GLIB2_VERSION
+)
 
-    # Handle dependencies
-    # libintl
-    IF ( NOT LIBINTL_FOUND )
-      FIND_PATH(LIBINTL_INCLUDE_DIR
-      NAMES
-        libintl.h
-      PATHS
-        /opt/gnome/include
-        /opt/local/include
-        /sw/include
-        /usr/include
-        /usr/local/include
-      )
+if( GLIB2_FOUND )
+	set( GLIB2_LIBRARIES ${GLIB2_LIBRARY} )
+	# Include transitive dependencies for static linking.
+	if(UNIX AND CMAKE_FIND_LIBRARY_SUFFIXES STREQUAL ".a")
+		find_library(PCRE_LIBRARY pcre)
+		list(APPEND GLIB2_LIBRARIES -pthread ${PCRE_LIBRARY})
+	endif()
+	set( GLIB2_INCLUDE_DIRS ${GLIB2_MAIN_INCLUDE_DIR} ${GLIB2_INTERNAL_INCLUDE_DIR} )
+	if ( WIN32 AND GLIB2_FOUND )
+		set ( GLIB2_DLL_DIR_RELEASE "${GLIB2_HINTS}/bin"
+			CACHE PATH "Path to GLib2 release DLLs"
+		)
+		set ( GLIB2_DLL_DIR_DEBUG "${GLIB2_HINTS}/debug/bin"
+			CACHE PATH "Path to GLib2 debug DLLs"
+		)
 
-      FIND_LIBRARY(LIBINTL_LIBRARY
-      NAMES
-        intl
-      PATHS
-        /opt/gnome/lib
-        /opt/local/lib
-        /sw/lib
-        /usr/local/lib
-        /usr/lib
-      )
+		# GTK+ required GObject and GIO. We probably don't.
+		file( GLOB _glib2_dlls_release RELATIVE "${GLIB2_DLL_DIR_RELEASE}"
+			# "${GLIB2_DLL_DIR_RELEASE}/gio-2.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/glib-2.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/gmodule-2.dll"
+			# "${GLIB2_DLL_DIR_RELEASE}/gobject-2.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/gthread-2.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/libcharset.dll"
+			# gnutls-3.6.3-1-win64ws ships with libffi-6.dll
+			# "${GLIB2_DLL_DIR_RELEASE}/libffi.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/libiconv.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/libintl.dll"
+			"${GLIB2_DLL_DIR_RELEASE}/pcre.dll"
+			# "${GLIB2_DLL_DIR_RELEASE}/pcre16.dll"
+			# "${GLIB2_DLL_DIR_RELEASE}/pcre32.dll"
+			# "${GLIB2_DLL_DIR_RELEASE}/pcrecpp.dll"
+			# "${GLIB2_DLL_DIR_RELEASE}/pcreposix.dll"
+		)
+		set ( GLIB2_DLLS_RELEASE ${_glib2_dlls_release}
+			# We're storing filenames only. Should we use STRING instead?
+			CACHE FILEPATH "GLib 2 release DLL list"
+		)
+		file( GLOB _glib2_dlls_debug RELATIVE "${GLIB2_DLL_DIR_DEBUG}"
+			# "${GLIB2_DLL_DIR_DEBUG}/gio-2.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/glib-2.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/gmodule-2.dll"
+			# "${GLIB2_DLL_DIR_DEBUG}/gobject-2.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/gthread-2.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/libcharset.dll"
+			# gnutls-3.6.3-1-win64ws ships with libffi-6.dll
+			# "${GLIB2_DLL_DIR_DEBUG}/libffi.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/libiconv.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/libintl.dll"
+			"${GLIB2_DLL_DIR_DEBUG}/pcred.dll"
+			# "${GLIB2_DLL_DIR_DEBUG}/pcre16d.dll"
+			# "${GLIB2_DLL_DIR_DEBUG}/pcre32d.dll"
+			# "${GLIB2_DLL_DIR_DEBUG}/pcrecppd.dll"
+			# "${GLIB2_DLL_DIR_DEBUG}/pcreposixd.dll"
+		)
+		set ( GLIB2_DLLS_DEBUG ${_glib2_dlls_debug}
+			# We're storing filenames only. Should we use STRING instead?
+			CACHE FILEPATH "GLib 2 debug DLL list"
+		)
 
-      IF (LIBINTL_LIBRARY AND LIBINTL_INCLUDE_DIR)
-        SET (LIBINTL_FOUND TRUE)
-      ENDIF (LIBINTL_LIBRARY AND LIBINTL_INCLUDE_DIR)
-    ENDIF ( NOT LIBINTL_FOUND )
+		file( GLOB _glib2_pdbs_release RELATIVE "${GLIB2_DLL_DIR_RELEASE}"
+			"${GLIB2_DLL_DIR_RELEASE}/glib-2.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/gmodule-2.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/gthread-2.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/libcharset.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/libiconv.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/libintl.pdb"
+			"${GLIB2_DLL_DIR_RELEASE}/pcre.pdb"
+		)
+		set ( GLIB2_PDBS_RELEASE ${_glib2_pdbs_release}
+			CACHE FILEPATH "GLib2 debug release PDB list"
+		)
+		file( GLOB _glib2_pdbs_debug RELATIVE "${GLIB2_DLL_DIR_DEBUG}"
+			"${GLIB2_DLL_DIR_DEBUG}/glib-2.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/gmodule-2.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/gthread-2.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/libcharset.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/libiconv.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/libintl.pdb"
+			"${GLIB2_DLL_DIR_DEBUG}/pcred.pdb"
+		)
+		set ( GLIB2_PDBS_DEBUG ${_glib2_pdbs_debug}
+			CACHE FILEPATH "GLib2 debug debug PDB list"
+		)
 
-    # libiconv
-    IF ( NOT LIBICONV_FOUND )
-      FIND_PATH(LIBICONV_INCLUDE_DIR
-      NAMES
-        iconv.h
-      PATHS
-        /opt/gnome/include
-        /opt/local/include
-        /opt/local/include
-        /sw/include
-        /sw/include
-        /usr/local/include
-        /usr/include
-      PATH_SUFFIXES
-        glib-2.0
-      )
+		mark_as_advanced( GLIB2_DLL_DIR_RELEASE GLIB2_DLLS_RELEASE GLIB2_PDBS_RELEASE )
+		mark_as_advanced( GLIB2_DLL_DIR_DEBUG GLIB2_DLLS_DEBUG GLIB2_PDBS_DEBUG )
+	endif()
+elseif( GLIB2_FIND_REQUIRED )
+	message( SEND_ERROR "Package required but not found" )
+else()
+	set( GLIB2_LIBRARIES )
+	set( GLIB2_MAIN_INCLUDE_DIRS )
+	set( GLIB2_DLL_DIR_RELEASE )
+	set( GLIB2_DLL_DIR_DEBUG )
+	set( GLIB2_PDBS_RELEASE )
+	set( GLIB2_PDBS_DEBUG )
+	set( GLIB2_DLLS )
+endif()
 
-      FIND_LIBRARY(LIBICONV_LIBRARY
-      NAMES
-        iconv
-      PATHS
-        /opt/gnome/lib
-        /opt/local/lib
-        /sw/lib
-        /usr/lib
-        /usr/local/lib
-      )
-
-      IF (LIBICONV_LIBRARY AND LIBICONV_INCLUDE_DIR)
-        SET (LIBICONV_FOUND TRUE)
-      ENDIF (LIBICONV_LIBRARY AND LIBICONV_INCLUDE_DIR)
-    ENDIF ( NOT LIBICONV_FOUND )
-
-    IF (LIBINTL_FOUND)
-      SET (GLIB2_LIBRARIES ${GLIB2_LIBRARIES} ${LIBINTL_LIBRARY})
-      SET (GLIB2_INCLUDE_DIRS ${GLIB2_INCLUDE_DIRS} ${LIBINTL_INCLUDE_DIR})
-    ENDIF (LIBINTL_FOUND)
-
-    IF (LIBICONV_FOUND)
-      SET (GLIB2_LIBRARIES ${GLIB2_LIBRARIES} ${LIBICONV_LIBRARY})
-      SET (GLIB2_INCLUDE_DIRS ${GLIB2_INCLUDE_DIRS} ${LIBICONV_INCLUDE_DIR})
-    ENDIF (LIBICONV_FOUND)
-
-  ENDIF ( NOT GLIB2_FOUND AND NOT PKG_CONFIG_FOUND )
-  ##
-
-  IF (GLIB2_CORE_FOUND AND GLIB2_INCLUDE_DIRS AND GLIB2_LIBRARIES)
-    SET (GLIB2_FOUND TRUE)
-  ENDIF (GLIB2_CORE_FOUND AND GLIB2_INCLUDE_DIRS AND GLIB2_LIBRARIES)
-
-  IF (GLIB2_FOUND)
-    IF (NOT GLIB2_FIND_QUIETLY)
-      MESSAGE (STATUS "Found GLib2: ${GLIB2_LIBRARIES} ${GLIB2_INCLUDE_DIRS}")
-    ENDIF (NOT GLIB2_FIND_QUIETLY)
-  ELSE (GLIB2_FOUND)
-    IF (GLIB2_FIND_REQUIRED)
-      MESSAGE (SEND_ERROR "Could not find GLib2")
-    ENDIF (GLIB2_FIND_REQUIRED)
-  ENDIF (GLIB2_FOUND)
-
-  # show the GLIB2_INCLUDE_DIRS and GLIB2_LIBRARIES variables only in the advanced view
-  MARK_AS_ADVANCED(GLIB2_INCLUDE_DIRS GLIB2_LIBRARIES)
-  MARK_AS_ADVANCED(LIBICONV_INCLUDE_DIR LIBICONV_LIBRARY)
-  MARK_AS_ADVANCED(LIBINTL_INCLUDE_DIR LIBINTL_LIBRARY)
-
-ENDIF (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS)
-
-IF ( WIN32 )
-    # include libiconv for win32
-    IF ( NOT LIBICONV_FOUND )
-      FIND_PATH(LIBICONV_INCLUDE_DIR iconv.h PATH_SUFFIXES glib-2.0)
-
-      FIND_LIBRARY(LIBICONV_LIBRARY NAMES iconv)
-
-      IF (LIBICONV_LIBRARY AND LIBICONV_INCLUDE_DIR)
-        SET (LIBICONV_FOUND TRUE)
-      ENDIF (LIBICONV_LIBRARY AND LIBICONV_INCLUDE_DIR)
-    ENDIF ( NOT LIBICONV_FOUND )
-    IF (LIBICONV_FOUND)
-      SET (GLIB2_LIBRARIES ${GLIB2_LIBRARIES} ${LIBICONV_LIBRARY})
-      SET (GLIB2_INCLUDE_DIRS ${GLIB2_INCLUDE_DIRS} ${LIBICONV_INCLUDE_DIR})
-    ENDIF (LIBICONV_FOUND)
-ENDIF ( WIN32 )
-
-IF ( GLIB2_FOUND )
-	# Check if system has a newer version of glib
-	# which supports g_regex_match_simple
-	INCLUDE( CheckIncludeFiles )
-	SET( CMAKE_REQUIRED_INCLUDES ${GLIB2_INCLUDE_DIRS} )
-	CHECK_INCLUDE_FILES ( glib/gregex.h HAVE_GLIB_GREGEX_H )
-	CHECK_INCLUDE_FILES ( glib/gchecksum.h HAVE_GLIB_GCHECKSUM_H )
-	# Reset CMAKE_REQUIRED_INCLUDES
-	SET( CMAKE_REQUIRED_INCLUDES "" )
-ENDIF( GLIB2_FOUND )
+mark_as_advanced( GLIB2_INCLUDE_DIRS GLIB2_LIBRARIES )
