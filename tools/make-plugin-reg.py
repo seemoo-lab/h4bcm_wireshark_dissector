@@ -102,7 +102,7 @@ reg_code = ""
 reg_code += preamble
 
 reg_code += """
-#include "wireshark/config.h"
+#include <wireshark/ws_version.h>
 
 #include <gmodule.h>
 
@@ -131,8 +131,8 @@ for symbol in regs['codec_register']:
 # FIXME should not be hardcoded here but actually come from moduleinfo.h ...
 reg_code += """
 WS_DLL_PUBLIC_DEF const gchar plugin_version[] = "0.0.2";
-WS_DLL_PUBLIC_DEF const int plugin_want_major = VERSION_MAJOR;
-WS_DLL_PUBLIC_DEF const int plugin_want_minor = VERSION_MINOR;
+WS_DLL_PUBLIC_DEF const int plugin_want_major = WIRESHARK_VERSION_MAJOR;
+WS_DLL_PUBLIC_DEF const int plugin_want_minor = WIRESHARK_VERSION_MINOR;
 
 WS_DLL_PUBLIC void plugin_register(void);
 
