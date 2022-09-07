@@ -21,8 +21,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "config.h"
-
 #include <epan/packet.h>
 #include <epan/prefs.h>
 
@@ -334,7 +332,7 @@ static int hf_lmp_versnr = -1;
 static int hf_lmp_wesco = -1;
 
 /* supported features page 0 (standard p. 528) */
-static const int *features_fields[] = {	
+static const int *features_fields[] = {
 	&hf_lmp_feat_3slot,
 	&hf_lmp_feat_5slot,
 	&hf_lmp_feat_enc,
@@ -404,8 +402,8 @@ static const int *features_fields[] = {
 
 
 /* supported features page 1+2 (standard p. 530) */
-static const int *extfeatures1_fields[] = {	
-	
+static const int *extfeatures1_fields[] = {
+
 	&hf_lmp_efeat_ssp,
 	&hf_lmp_efeat_lesup,
 	&hf_lmp_efeat_lebredr,
@@ -413,7 +411,7 @@ static const int *extfeatures1_fields[] = {
 	NULL
 };
 
-static const int *extfeatures2_fields[] = {	
+static const int *extfeatures2_fields[] = {
 	&hf_lmp_efeat_csbma,
 	&hf_lmp_efeat_csbsl,
 	&hf_lmp_efeat_syntr,
@@ -2695,7 +2693,7 @@ dissect_vsc(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 	 * 	BFC Reserved: 0x%02X\
 	 * 5: BFC Accept
 	 * 	BPCS Accepted Opcode: 0x%02X
-	 * 	
+	 *
 	 */
 }
 
@@ -3238,7 +3236,7 @@ dissect_features_req(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 {
 	DISSECTOR_ASSERT(len == 9);
 	DISSECTOR_ASSERT(tvb_reported_length_remaining(tvb, offset) >= 8);
-    
+
 	proto_tree_add_bitmask(tree, tvb, offset, hf_lmp_features,
 			ett_lmp_features, features_fields, ENC_LITTLE_ENDIAN);
 }
@@ -3248,7 +3246,7 @@ dissect_features_res(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 {
 	DISSECTOR_ASSERT(len == 9);
 	DISSECTOR_ASSERT(tvb_reported_length_remaining(tvb, offset) >= 8);
-	
+
 	proto_tree_add_bitmask(tree, tvb, offset, hf_lmp_features,
 			ett_lmp_features, features_fields, ENC_LITTLE_ENDIAN);
 }
@@ -3563,7 +3561,7 @@ void
 dissect_features_req_ext(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 {
 	int feat_page = 0;
-	
+
 	DISSECTOR_ASSERT(len == 12);
 	DISSECTOR_ASSERT(tvb_reported_length_remaining(tvb, offset) >= 10);
 
@@ -3574,7 +3572,7 @@ dissect_features_req_ext(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 	proto_tree_add_item(tree, hf_lmp_maxsp, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 	offset += 1;
 
-	
+
 	if (feat_page == 1)
 	{
 		proto_tree_add_bitmask(tree, tvb, offset, hf_lmp_featuresext,
@@ -3585,7 +3583,7 @@ dissect_features_req_ext(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 		proto_tree_add_bitmask(tree, tvb, offset, hf_lmp_featuresext,
 				ett_lmp_featuresext, extfeatures2_fields, ENC_LITTLE_ENDIAN);
 	}
-	
+
 }
 
 void
@@ -3602,7 +3600,7 @@ dissect_features_res_ext(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 	proto_tree_add_item(tree, hf_lmp_maxsp, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 	offset += 1;
 
-	if (feat_page == 1) 
+	if (feat_page == 1)
 	{
 		proto_tree_add_bitmask(tree, tvb, offset, hf_lmp_featuresext,
 				ett_lmp_featuresext, extfeatures1_fields, ENC_LITTLE_ENDIAN);
@@ -4147,7 +4145,7 @@ dissect_btbrlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	default:
 		break;
 	}
-	
+
 	/* Return the amount of data this dissector was able to dissect */
 	return tvb_reported_length(tvb);
 };
@@ -5233,12 +5231,12 @@ proto_register_btbrlmp(void)
 
 	/* register the protocol name and description */
 	proto_btbrlmp = proto_register_protocol(
-		"Bluetooth Link Manager Protocol",	/* full name */
-		"btlmp",		/* short name */
-		"btlmp"			/* abbreviation (e.g. for filters) */
+		"Bluetooth BR Link Manager Protocol",	/* full name */
+		"btbrlmp",		/* short name */
+		"btbrlmp"			/* abbreviation (e.g. for filters) */
 		);
 
-	register_dissector("btlmp", dissect_btbrlmp, proto_btbrlmp);
+	register_dissector("btbrlmp", dissect_btbrlmp, proto_btbrlmp);
 
 	/* register the header fields and subtrees used */
 	proto_register_field_array(proto_btbrlmp, hf, array_length(hf));

@@ -1,28 +1,39 @@
+# Locate the Wireshark library.
 #
-# Try to find the wireshark library and its includes
+# This file is meant to be copied into projects that want to use Wireshark.
+# It will search for WiresharkConfig.cmake, which ships with Wireshark
+# and will provide up-to-date buildsystem changes. Thus there should not be
+# any need to update FindWiresharkVc.cmake again after you integrated it into
+# your project.
 #
-# This snippet sets the following variables:
-#  WIRESHARK_FOUND             True if wireshark library got found
-#  WIRESHARK_INCLUDE_DIRS      Location of the wireshark headers 
-#  WIRESHARK_LIBRARIES         List of libraries to use wireshark
-#
-#  Copyright (c) 2011 Reinhold Kainhofer <reinhold@kainhofer.com>
-#
-#  Redistribution and use is allowed according to the terms of the New
-#  BSD license.
-#  For details see the accompanying COPYING-CMAKE-SCRIPTS file.
-#
+# This module defines the following variables:
+# Wireshark_FOUND
+# Wireshark_VERSION_MAJOR
+# Wireshark_VERSION_MINOR
+# Wireshark_VERSION_PATCH
+# Wireshark_VERSION
+# Wireshark_VERSION_STRING
+# Wireshark_INSTALL_DIR
+# Wireshark_PLUGIN_INSTALL_DIR
+# Wireshark_LIB_DIR
+# Wireshark_LIBRARY
+# Wireshark_INCLUDE_DIR
+# Wireshark_CMAKE_MODULES_DIR
 
-# wireshark does not install its library with pkg-config information,
-# so we need to manually find the libraries and headers
+find_package(Wireshark ${Wireshark_FIND_VERSION} QUIET NO_MODULE PATHS $ENV{HOME} /opt/Wireshark)
 
-FIND_PATH( WIRESHARK_INCLUDE_DIRS epan/packet.h PATH_SUFFIXES wireshark )
-FIND_LIBRARY( WIRESHARK_LIBRARIES wireshark )
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(Wireshark CONFIG_MODE)
 
-# Report results
-IF ( WIRESHARK_LIBRARIES AND WIRESHARK_INCLUDE_DIRS )
-  SET( WIRESHARK_FOUND 1 )
-ELSE ( WIRESHARK_LIBRARIES AND WIRESHARK_INCLUDE_DIRS )
-  MESSAGE( SEND_ERROR "Could NOT find the wireshark library and headers" )
-ENDIF ( WIRESHARK_LIBRARIES AND WIRESHARK_INCLUDE_DIRS )
-
+MESSAGE(STATUS "Wireshark_FOUND: ${Wireshark_FOUND}")
+MESSAGE(STATUS "Wireshark_VERSION_MAJOR: ${Wireshark_VERSION_MAJOR}")
+MESSAGE(STATUS "Wireshark_VERSION_MINOR: ${Wireshark_VERSION_MINOR}")
+MESSAGE(STATUS "Wireshark_VERSION_PATCH: ${Wireshark_VERSION_PATCH}")
+MESSAGE(STATUS "Wireshark_VERSION: ${Wireshark_VERSION}")
+MESSAGE(STATUS "Wireshark_VERSION_STRING: ${Wireshark_VERSION_STRING}")
+MESSAGE(STATUS "Wireshark_INSTALL_DIR: ${Wireshark_INSTALL_DIR}")
+MESSAGE(STATUS "Wireshark_PLUGIN_INSTALL_DIR: ${Wireshark_PLUGIN_INSTALL_DIR}")
+MESSAGE(STATUS "Wireshark_LIB_DIR: ${Wireshark_LIB_DIR}")
+MESSAGE(STATUS "Wireshark_LIBRARY: ${Wireshark_LIBRARY}")
+MESSAGE(STATUS "Wireshark_INCLUDE_DIR: ${Wireshark_INCLUDE_DIR}")
+MESSAGE(STATUS "Wireshark_CMAKE_MODULES_DIR: ${Wireshark_CMAKE_MODULES_DIR}")

@@ -23,8 +23,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "config.h"
-
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <string.h>
@@ -326,7 +324,7 @@ dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	proto_item *hdr_item;
 	proto_tree *hdr_tree;
-	
+
 	/* DM1 is only transmitted within full diagnostic reports */
 	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
 
@@ -347,14 +345,14 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 {
 	guint32 mac;
 	gchar *mac_string = (gchar *)g_malloc(12);
-	
+
 	/* LMP and LCP are only transmitted within full diagnostic reports */
 	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
-	
+
 	/* clock of the BT master */
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
-	
+
 	/* decode and display MAC address in src/dst fields */
 	mac = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
 	g_snprintf(mac_string, 12,
@@ -363,9 +361,9 @@ dissect_lm_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
 		(mac & 0x00ff0000) >>16,
 		(mac & 0x0000ff00) >> 8,
 		(mac & 0x000000ff));
-	
+
 	proto_tree_add_item(tree, hf_h4bcm_maclow, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	
+
 	if (is_sent == 1) {
 		col_set_str(pinfo->cinfo, COL_RES_DL_SRC, "controller");
 		col_set_str(pinfo->cinfo, COL_RES_DL_DST, mac_string);
@@ -386,16 +384,16 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 
 	/* LMP is only transmitted within full diagnostic reports */
 	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
-	
+
 	/* DM1 header is common in both directions */
 	dm1_hdr = tvb_get_guint8(tvb, offset);
 	len = dissect_payload_header1(tree, tvb, offset);
-	
+
 	/* Longest LMP packet is 17 bytes */
 	DISSECTOR_ASSERT(len <= 17);
-	
+
 	offset += 1;
-	
+
 	/* In receive direction, diagnostic LMP always sends a packet length 17,
 	 * which makes failed assertions inside the LMP decoder...
 	 * The fixed length corresponds to a DM1 header of 0x8f in flow direction
@@ -611,7 +609,7 @@ dissect_acl_edr_stats(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
 	offset += 2;
 }
 
-/* LL_VERSION_IND p. 2594 
+/* LL_VERSION_IND p. 2594
  */
 void
 dissect_ll_version_ind(proto_tree *tree, tvbuff_t *tvb, int offset)
@@ -636,10 +634,10 @@ dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
 	int opcode_ext;
 	guint64 mac;
 	gchar *mac_string = (gchar *)g_malloc(18);
-	
+
 	/* LMP and LCP are only transmitted within full diagnostic reports */
 	DISSECTOR_ASSERT(tvb_reported_length(tvb) == 63);
-	
+
 	/* clock of the BT master */
 	proto_tree_add_item(tree, hf_h4bcm_clock, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
@@ -668,7 +666,7 @@ dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
 	/* Handle (only 1 byte, even though it can be 2 bytes long?!) */
 	proto_tree_add_item(tree, hf_h4bcm_le_handle, tvb, offset, 1, ENC_NA);
 	offset += 1;
-	
+
 	opcode = tvb_get_guint8(tvb, offset);
 	proto_tree_add_item(tree, hf_h4bcm_le_opcode, tvb, offset, 1, ENC_NA);
 	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(opcode,
@@ -720,8 +718,8 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	if (tvb_reported_length(tvb) < 1)
 		/* bad length: look for a different dissector */
 		return 0;
-	
-	
+
+
 	/* fprintf(stderr, "total len %d\n", tvb_reported_length(tvb)); */
 
 	/* make entries in protocol column and info column on summary display */
@@ -731,11 +729,11 @@ dissect_h4bcm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 	offset = 0;
 	h4bcm_item = proto_tree_add_item(tree, proto_h4bcm, tvb, offset, -1, ENC_NA);
 	h4bcm_tree = proto_item_add_subtree(h4bcm_item, ett_h4bcm);
-		
+
 	h4bcm_type = tvb_get_guint8(tvb, offset);
 	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(h4bcm_type, h4bcm_types, "Unknown Type (%d)"));
 	offset += 1;
-		
+
 	switch (h4bcm_type) {
 	case DIA_LM_SENT:
 		dissect_lm_header(tvb, pinfo, h4bcm_tree, offset, 1);
@@ -1111,12 +1109,12 @@ proto_reg_handoff_h4bcm(void)
 {
 	dissector_handle_t h4bcm_handle;
 	h4bcm_handle = create_dissector_handle(dissect_h4bcm, proto_h4bcm);
-	
+
 	/* hci_h4.type == 0x07 */
 	dissector_add_uint("hci_h4.type", 0x07, h4bcm_handle);
-	
+
 	/* LMP dissector from https://github.com/greatscottgadgets/libbtbb */
-	btlmp_handle = find_dissector("btlmp");
+	btlmp_handle = find_dissector("btbrlmp");
 }
 
 /*
