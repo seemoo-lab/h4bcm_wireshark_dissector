@@ -116,6 +116,8 @@
 #define LMP_KEYPRESS_NOTIFICATION      30
 #define LMP_POWER_CONTROL_REQ          31
 #define LMP_POWER_CONTROL_RES          32
+#define LMP_PING_REQ 33
+#define LMP_PING_RES 34
 
 /* initialize the protocol and registered fields */
 static int proto_btbrlmp = -1;
@@ -559,6 +561,8 @@ static const value_string ext_opcode[] = {
 	{ LMP_KEYPRESS_NOTIFICATION, "LMP_keypress_notification" },
 	{ LMP_POWER_CONTROL_REQ, "LMP_power_control_req" },
 	{ LMP_POWER_CONTROL_RES, "LMP_power_control_res" },
+	{ LMP_PING_REQ, "LMP_ping_req" },
+	{ LMP_PING_RES, "LMP_ping_res" },
 	{ 0, NULL }
 };
 
@@ -666,6 +670,8 @@ static const value_string versnr[] = {
 	{ 7, "Bluetooth Core Specification 4.1" },
 	{ 8, "Bluetooth Core Specification 4.2" },
 	{ 9, "Bluetooth Core Specification 5.0" },
+	{ 10, "Bluetooth Core Specification 5.1" },
+	{ 11, "Bluetooth Core Specification 5.2" },
 	/* 10 - 255 reserved */
 	{ 0, NULL }
 };
@@ -3825,6 +3831,16 @@ dissect_power_control_res(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 	proto_tree_add_item(pa_tree, hf_lmp_pwradj_8dpsk, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 }
 
+void dissect_ping_req(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
+{
+	DISSECTOR_ASSERT(len == 2);
+}
+
+void dissect_ping_res(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
+{
+	DISSECTOR_ASSERT(len == 2);
+}
+
 /* Link Manager Protocol */
 static int
 dissect_btbrlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -4138,6 +4154,12 @@ dissect_btbrlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 			break;
 		case LMP_POWER_CONTROL_RES:
 			dissect_power_control_res(lmp_tree, tvb, offset, len);
+			break;
+		case LMP_PING_REQ:
+			dissect_ping_req(lmp_tree, tvb, offset, len);
+			break;
+		case LMP_PING_RES:
+			dissect_ping_res(lmp_tree, tvb, offset, len);
 			break;
 		default:
 			break;
@@ -5260,3 +5282,4 @@ proto_reg_handoff_btbrlmp(void)
  * vi: set shiftwidth=4 tabstop=8 expandtab:
  * :indentSize=4:tabSize=8:noTabs=true:
  */
+
