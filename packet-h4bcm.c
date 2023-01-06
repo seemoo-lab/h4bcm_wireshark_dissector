@@ -980,12 +980,12 @@ dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
 	mac = tvb_get_guint64(tvb, offset-2, ENC_BIG_ENDIAN);
 	g_snprintf(mac_string, 18,
 		"%02x:%02x:%02x:%02x:%02x:%02x",
-		(mac & 0xff0000000000) >>40,
-		(mac & 0x00ff00000000) >>32,
-		(mac & 0x0000ff000000) >>24,
-		(mac & 0x000000ff0000) >>16,
-		(mac & 0x00000000ff00) >> 8,
-		(mac & 0x0000000000ff));
+		(unsigned int)((mac & 0xff0000000000) >>40),
+		(unsigned int)((mac & 0x00ff00000000) >>32),
+		(unsigned int)((mac & 0x0000ff000000) >>24),
+		(unsigned int)((mac & 0x000000ff0000) >>16),
+		(unsigned int)((mac & 0x00000000ff00) >> 8),
+		(unsigned int)((mac & 0x0000000000ff)));
 	proto_tree_add_item(tree, hf_h4bcm_le_ether, tvb, offset, 6, ENC_LITTLE_ENDIAN);
 	offset += 6;
 
