@@ -116,8 +116,8 @@
 #define LMP_KEYPRESS_NOTIFICATION      30
 #define LMP_POWER_CONTROL_REQ          31
 #define LMP_POWER_CONTROL_RES          32
-#define LMP_PING_REQ 33
-#define LMP_PING_RES 34
+#define LMP_PING_REQ                   33
+#define LMP_PING_RES                   34
 
 /* initialize the protocol and registered fields */
 static int proto_btbrlmp = -1;
@@ -334,7 +334,7 @@ static int hf_lmp_versnr = -1;
 static int hf_lmp_wesco = -1;
 
 /* supported features page 0 (standard p. 528) */
-static const int *features_fields[] = {
+static int * const features_fields[] = {
 	&hf_lmp_feat_3slot,
 	&hf_lmp_feat_5slot,
 	&hf_lmp_feat_enc,
@@ -404,7 +404,7 @@ static const int *features_fields[] = {
 
 
 /* supported features page 1+2 (standard p. 530) */
-static const int *extfeatures1_fields[] = {
+static int * const extfeatures1_fields[] = {
 
 	&hf_lmp_efeat_ssp,
 	&hf_lmp_efeat_lesup,
@@ -413,7 +413,7 @@ static const int *extfeatures1_fields[] = {
 	NULL
 };
 
-static const int *extfeatures2_fields[] = {
+static int * const extfeatures2_fields[] = {
 	&hf_lmp_efeat_csbma,
 	&hf_lmp_efeat_csbsl,
 	&hf_lmp_efeat_syntr,
@@ -432,7 +432,7 @@ static const int *extfeatures2_fields[] = {
 
 
 /* timing control flags */
-static const int *timectrl_fields[] = {
+static int * const timectrl_fields[] = {
 	&hf_lmp_time_change,
 	&hf_lmp_time_init,
 	&hf_lmp_time_accwin,
@@ -3843,7 +3843,7 @@ void dissect_ping_res(proto_tree *tree, tvbuff_t *tvb, int offset, int len)
 
 /* Link Manager Protocol */
 static int
-dissect_btbrlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+dissect_btbrlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 	proto_item *lmp_item;
 	proto_tree *lmp_tree;
@@ -5282,4 +5282,3 @@ proto_reg_handoff_btbrlmp(void)
  * vi: set shiftwidth=4 tabstop=8 expandtab:
  * :indentSize=4:tabSize=8:noTabs=true:
  */
-
