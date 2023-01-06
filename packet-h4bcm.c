@@ -65,9 +65,15 @@ static int hf_h4bcm_type = -1;
 static int hf_h4bcm_clock = -1;
 static int hf_h4bcm_maclow = -1;
 static int hf_h4bcm_pldhdr = -1;
+static int hf_h4bcm_aclhdr = -1;
 static int hf_h4bcm_llid = -1;
+static int hf_h4bcm_llid_acl = -1;
+static int hf_h4bcm_acl_fragment = -1;
 static int hf_h4bcm_pldflow = -1;
+static int hf_h4bcm_pldflow_acl = -1;
 static int hf_h4bcm_length = -1;
+static int hf_h4bcm_length_acl = -1;
+static int hf_h4bcm_rfu = -1;
 static int hf_h4bcm_payload = -1;
 static int hf_h4bcm_lm_toggle = -1;
 static int hf_h4bcm_stats_null_rcvd = -1;
@@ -96,7 +102,7 @@ static int hf_h4bcm_stats_hec_err = -1;
 static int hf_h4bcm_stats_crc_err = -1;
 static int hf_h4bcm_stats_seqn_rep = -1;
 static int hf_h4bcm_stats_soft_rst = -1;
-static int hf_h4bcm_stats_test_tx = -1;;
+static int hf_h4bcm_stats_test_tx = -1;
 static int hf_h4bcm_stats_test_rx = -1;
 static int hf_h4bcm_stats_test_err = -1;
 static int hf_h4bcm_stats_2dh1_rcvd = -1;
@@ -118,15 +124,56 @@ static int hf_h4bcm_le_opcode_ext = -1;
 static int hf_h4bcm_ll_version_ind_versnr = -1;
 static int hf_h4bcm_ll_version_ind_compid = -1;
 static int hf_h4bcm_ll_version_ind_subversnr = -1;
+// Baseband
+static int hf_btbbd = -1;
+// Baseband Metadata
+static int hf_btbbd_meta = -1;
+static int hf_btbbd_clk = -1;
+static int hf_btbbd_channel = -1;
+static int hf_btbbd_ptt = -1;
+static int hf_btbbd_role = -1;
+static int hf_btbbd_tx_encrypted = -1;
+static int hf_btbbd_rx_encrypted = -1;
+static int hf_btbbd_is_eir = -1;
+// Baseband Packet Header
+static int hf_btbbd_pkthdr = -1;
+static int hf_btbbd_ltaddr = -1;
+static int hf_btbbd_type = -1;
+static int hf_btbbd_type_br = -1;
+static int hf_btbbd_type_edr = -1;
+static int hf_btbbd_flags = -1;
+static int hf_btbbd_flow = -1;
+static int hf_btbbd_arqn = -1;
+static int hf_btbbd_seqn = -1;
+static int hf_btbbd_hec = -1;
+// FHS
+static int hf_btbbd_fhs = -1;
+static int hf_btbbd_fhs_parity = -1;
+static int hf_btbbd_fhs_lap = -1;
+static int hf_btbbd_fhs_eir = -1;
+static int hf_btbbd_fhs_sr = -1;
+static int hf_btbbd_fhs_uap = -1;
+static int hf_btbbd_fhs_nap = -1;
+static int hf_btbbd_fhs_class = -1;
+static int hf_btbbd_fhs_ltaddr = -1;
+static int hf_btbbd_fhs_clk = -1;
+static int hf_btbbd_fhs_psmode = -1;
 
 /* initialize the subtree pointers */
 static gint ett_h4bcm = -1;
 static gint ett_h4bcm_pldhdr = -1;
+static gint ett_h4bcm_aclhdr = -1;
 static gint ett_h4bcm_acl_br_stats = -1;
 static gint ett_h4bcm_acl_edr_stats = -1;
+static gint ett_btbbd = -1;
+static gint ett_btbbd_meta = -1;
+static gint ett_btbbd_pkthdr = -1;
+static gint ett_btbbd_fhs = -1;
 
 /* subdissectors */
 static dissector_handle_t btlmp_handle = NULL;
+static dissector_handle_t btl2cap_handle = NULL;
+static dissector_handle_t packetlogger_handle = NULL;
 
 /* reversed Broadcom diagnostic types */
 static const value_string h4bcm_types[] = {
@@ -271,6 +318,8 @@ static const int lmp_lengths_ext[] = {
 	 3, /* LMP_KEYPRESS_NOTIFICATION */
 	 3, /* LMP_POWER_CONTROL_REQ */
 	 3, /* LMP_POWER_CONTROL_RES */
+	 2, /* LMP_PING_REQ */
+	 2, /* LMP_PING_RES */
 };
 
 /* Bluetooth 5.0 specification p. 2589 */
@@ -318,6 +367,77 @@ static const true_false_string lm_toggle = {
 	"disabled"
 };
 
+static const true_false_string packet_table_type_bits = {
+	"EDR", // Enhanced Data Rate
+	"BR",  // Basic Rate
+};
+
+static const true_false_string packet_role_bits = {
+	"Slave",
+	"Master",
+};
+
+static const value_string packet_types[] = {
+	/* generic names for unknown logical transport */
+	{0x0, "NULL"},
+	{0x1, "POLL"},
+	{0x2, "FHS"},
+	{0x3, "DM1"},
+	{0x4, "DH1/2-DH1"},
+	{0x5, "HV1"},
+	{0x6, "HV2/2-EV3"},
+	{0x7, "HV3/EV3/3-EV3"},
+	{0x8, "DV/3-DH1"},
+	{0x9, "AUX1"},
+	{0xa, "DM3/2-DH3"},
+	{0xb, "DH3/3-DH3"},
+	{0xc, "EV4/2-EV5"},
+	{0xd, "EV5/3-EV5"},
+	{0xe, "DM5/2-DH5"},
+	{0xf, "DH5/3-DH5"},
+	{0, NULL}};
+
+static const value_string packet_types_br[] = {
+	/* generic names for unknown logical transport */
+	{0x0, "NULL"},
+	{0x1, "POLL"},
+	{0x2, "FHS"},
+	{0x3, "DM1"},
+	{0x4, "DH1"},
+	{0x9, "AUX1"},
+	{0xa, "DM3"},
+	{0xb, "DH3"},
+	{0xe, "DM5"},
+	{0xf, "DH5"},
+	{0, NULL}};
+
+static const value_string packet_types_edr[] = {
+	/* generic names for unknown logical transport */
+	{0x0, "NULL"},
+	{0x1, "POLL"},
+	{0x2, "FHS"},
+	{0x3, "DM1"},
+	{0x4, "2-DH1"},
+	{0x8, "3-DH1"},
+	{0x9, "AUX1"},
+	{0xa, "2-DH3"},
+	{0xb, "3-DH3"},
+	{0xe, "2-DH5"},
+	{0xf, "3-DH5"},
+	{0, NULL}};
+
+static const value_string sr_modes[] = {
+	{0x0, "R0"},
+	{0x1, "R1"},
+	{0x2, "R2"},
+	{0x3, "Reserved"},
+	{0, NULL}};
+
+static const range_string ps_modes[] = {
+	{0x0, 0x0, "Mandatory scan mode"},
+	{0x1, 0x7, "Reserved"},
+	{0, 0, NULL}};
+
 /* one byte payload header */
 int
 dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
@@ -337,6 +457,24 @@ dissect_payload_header1(proto_tree *tree, tvbuff_t *tvb, int offset)
 
 	/* payload length */
 	return tvb_get_guint8(tvb, offset) >> 3;
+}
+
+/* two byte payload header */
+static int dissect_payload_header_acl_edr(proto_tree *tree, tvbuff_t *tvb, int offset)
+{
+	proto_item *hdr_item;
+	proto_tree *hdr_tree;
+
+	hdr_item = proto_tree_add_item(tree, hf_h4bcm_aclhdr, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	hdr_tree = proto_item_add_subtree(hdr_item, ett_h4bcm_aclhdr);
+
+	proto_tree_add_item(hdr_tree, hf_h4bcm_llid_acl, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(hdr_tree, hf_h4bcm_pldflow_acl, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(hdr_tree, hf_h4bcm_length_acl, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(hdr_tree, hf_h4bcm_rfu, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
+
+	/* payload length */
+	return (tvb_get_guint16(tvb, offset, ENC_LITTLE_ENDIAN) >> 3) & 0x3FF;
 }
 
 /* Dissect common LM and LE LM header */
@@ -423,6 +561,202 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 		/* Maximum (constant) LMP length is 17 */
 		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, 17, ENC_LITTLE_ENDIAN);
 	}
+}
+
+/* Pass ACL handling to existing dissector if available */
+static int dissect_acl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+	tvbuff_t *pld_tvb;
+	int len;
+	int opcode;
+	int offset = 0;
+	int llid;
+
+	// struct timespec start_time;
+	// struct timespec end_time;
+	// clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, "ACL");
+
+	len = dissect_payload_header_acl_edr(tree, tvb, offset);
+	llid = tvb_get_guint8(tvb, offset) & 0x03;
+
+	offset += 2;
+
+	if (len)
+	{
+		pld_tvb = tvb_new_subset_length(tvb, offset, len);
+		switch (llid)
+		{
+		case 1:
+			proto_tree_add_item(tree, hf_h4bcm_acl_fragment, tvb, offset, len, ENC_LITTLE_ENDIAN);
+			switch (pinfo->p2p_dir)
+			{
+			case P2P_DIR_SENT:
+				col_set_str(pinfo->cinfo, COL_INFO, "TX --> Fragment");
+				break;
+			case P2P_DIR_RECV:
+				col_set_str(pinfo->cinfo, COL_INFO, "RX <-- Fragment");
+				break;
+			default:
+				break;
+			}
+			break;
+
+		case 2:
+			call_dissector(btl2cap_handle, pld_tvb, pinfo, tree);
+			break;
+
+		case 3:
+			call_dissector(btlmp_handle, pld_tvb, pinfo, tree);
+			break;
+
+		default:
+			proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, len, ENC_LITTLE_ENDIAN);
+			break;
+		}
+	}
+	else
+	{
+		proto_tree_add_item(tree, hf_h4bcm_payload, tvb, offset, len, ENC_LITTLE_ENDIAN);
+	}
+
+	return tvb_reported_length(tvb);
+}
+
+static void dissect_fhs(proto_tree *tree, tvbuff_t *tvb, int offset)
+{
+	proto_item *fhs_item, *psmode_item;
+	proto_tree *fhs_tree;
+	const gchar *description;
+	guint8 psmode;
+
+	fhs_item = proto_tree_add_item(tree, hf_btbbd_fhs, tvb, offset, -1, ENC_NA);
+	fhs_tree = proto_item_add_subtree(fhs_item, ett_btbbd_fhs);
+
+	/* Use proto_tree_add_bits_item() to get around 32bit limit on bitmasks */
+	proto_tree_add_bits_item(fhs_tree, hf_btbbd_fhs_parity, tvb, offset * 8, 34, ENC_LITTLE_ENDIAN);
+	/* proto_tree_add_item(fhs_tree, hf_btbb_fhs_parity, tvb, offset, 5, ENC_LITTLE_ENDIAN); */
+	offset += 4;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_lap, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 3;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_eir, tvb, offset, 1, ENC_NA);
+	/* skipping 1 undefined bit */
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_sr, tvb, offset, 1, ENC_NA);
+	/* skipping 2 reserved bits */
+	offset += 1;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_uap, tvb, offset, 1, ENC_NA);
+	offset += 1;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_nap, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_class, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+	offset += 3;
+
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_ltaddr, tvb, offset, 1, ENC_NA);
+	proto_tree_add_item(fhs_tree, hf_btbbd_fhs_clk, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 3;
+
+	psmode = tvb_get_guint8(tvb, offset);
+	description = try_rval_to_str(psmode, ps_modes);
+	psmode_item = proto_tree_add_item(fhs_tree, hf_btbbd_fhs_psmode, tvb, offset, 1, ENC_NA);
+	if (description)
+		proto_item_append_text(psmode_item, " (%s)", description);
+	offset += 1;
+}
+
+static int dissect_bt_baseband(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+	tvbuff_t *pld_tvb;
+	int offset = 0;
+	int bb_type;
+	int ptt;
+
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Baseband");
+
+	// // Baseband protocol
+	proto_item *btbb_item = proto_tree_add_item(tree, hf_btbbd, tvb, offset, 11, ENC_LITTLE_ENDIAN);
+	proto_tree *btbb_tree = proto_item_add_subtree(btbb_item, ett_btbbd);
+	// // Baseband Metadata
+	proto_item *btbb_meta_item = proto_tree_add_item(btbb_tree, hf_btbbd_meta, tvb, offset, 5, ENC_LITTLE_ENDIAN);
+	proto_tree *btbb_meta_tree = proto_item_add_subtree(btbb_meta_item, ett_btbbd_meta);
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_clk, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_channel, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_ptt, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_role, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_tx_encrypted, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(btbb_meta_tree, hf_btbbd_rx_encrypted, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(btbb_meta_tree, hf_btbbd_is_eir, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	// ptt = tvb_get_guint8(tvb, offset) & 0b1;
+	offset += 1;
+	// Baseband Packet Header
+	proto_item *btbb_pkthdr_item = proto_tree_add_item(btbb_tree, hf_btbbd_pkthdr, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	proto_tree *btbb_pkthdr_tree = proto_item_add_subtree(btbb_pkthdr_item, ett_btbbd_pkthdr);
+	proto_tree_add_item(btbb_pkthdr_tree, hf_btbbd_ltaddr, tvb, offset, 1, ENC_NA);
+	proto_tree_add_item_ret_uint(btbb_pkthdr_tree, hf_btbbd_type, tvb, offset, 1, ENC_NA, &bb_type);
+	// if (!ptt)
+	// 	proto_tree_add_item_ret_uint(btbb_pkthdr_tree, hf_btbbd_type_br, tvb, offset, 1, ENC_NA, &bb_type);
+	// else
+	// 	proto_tree_add_item_ret_uint(btbb_pkthdr_tree, hf_btbbd_type_edr, tvb, offset, 1, ENC_NA, &bb_type);
+	proto_tree_add_item(btbb_pkthdr_tree, hf_btbbd_flow, tvb, offset, 1, ENC_NA);
+    offset += 1;
+	proto_tree_add_item(btbb_pkthdr_tree, hf_btbbd_arqn, tvb, offset, 1, ENC_NA);
+    proto_tree_add_item(btbb_pkthdr_tree, hf_btbbd_seqn, tvb, offset, 1, ENC_NA);	
+	proto_tree_add_item(btbb_pkthdr_tree, hf_btbbd_hec, tvb, offset, 1, ENC_NA);
+	offset += 1;
+
+	switch (pinfo->p2p_dir)
+	{
+	case P2P_DIR_SENT:
+		col_set_str(pinfo->cinfo, COL_INFO, "TX --> ");
+		break;
+	case P2P_DIR_RECV:
+		col_set_str(pinfo->cinfo, COL_INFO, "RX <-- ");
+		break;
+	default:
+		break;
+	}
+
+	/* payload */
+	switch (bb_type)
+	{
+	case 0x0: /* NULL */
+		col_append_str(pinfo->cinfo, COL_INFO, "NULL");
+		break;
+	case 0x1: /* POLL */
+		col_append_str(pinfo->cinfo, COL_INFO, "POLL");
+		break;
+	case 0x2: /* FHS */
+		col_append_str(pinfo->cinfo, COL_INFO, "FHS");
+		dissect_fhs(tree, tvb, offset);
+		break;
+	case 0x3: /* DM1 */
+	case 0x4: /* DH1/2-DH1 */
+	case 0x5: /* HV1 */
+	case 0x6: /* HV2/2-EV3 */
+	case 0x7: /* HV3/EV3/3-EV3 */
+	case 0x8: /* DV/3-DH1 */
+	case 0x9: /* AUX1 */
+	case 0xa: /* DM3/2-DH3 */
+	case 0xb: /* DH3/3-DH3 */
+	case 0xc: /* EV4/2-EV5 */
+	case 0xd: /* EV5/3-EV5 */
+	case 0xe: /* DM5/2-DH5 */
+	case 0xf: /* DH5/3-DH5 */
+		pld_tvb = tvb_new_subset_remaining(tvb, offset);
+		dissect_acl(pld_tvb, pinfo, tree, &ptt);
+		break;
+	default:
+		break;
+	}
+
+	return tvb_reported_length(tvb);
 }
 
 /* TODO placeholder for responses we don't know yet */
@@ -646,12 +980,12 @@ dissect_lm_le(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
 	mac = tvb_get_guint64(tvb, offset-2, ENC_BIG_ENDIAN);
 	g_snprintf(mac_string, 18,
 		"%02x:%02x:%02x:%02x:%02x:%02x",
-		(mac & 0xff0000000000) >>40,
-		(mac & 0x00ff00000000) >>32,
-		(mac & 0x0000ff000000) >>24,
-		(mac & 0x000000ff0000) >>16,
-		(mac & 0x00000000ff00) >> 8,
-		(mac & 0x0000000000ff));
+		(unsigned int)((mac & 0xff0000000000) >>40),
+		(unsigned int)((mac & 0x00ff00000000) >>32),
+		(unsigned int)((mac & 0x0000ff000000) >>24),
+		(unsigned int)((mac & 0x000000ff0000) >>16),
+		(unsigned int)((mac & 0x00000000ff00) >> 8),
+		(unsigned int)((mac & 0x0000000000ff)));
 	proto_tree_add_item(tree, hf_h4bcm_le_ether, tvb, offset, 6, ENC_LITTLE_ENDIAN);
 	offset += 6;
 
@@ -817,10 +1151,30 @@ proto_register_h4bcm(void)
 			FT_NONE, BASE_NONE, NULL, 0x0,
 			NULL, HFILL }
 		},
+		{ &hf_h4bcm_aclhdr,
+			{ "ACL Header", "h4bcm.aclhdr",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL }
+		},
 		{ &hf_h4bcm_llid,
 			{ "LLID", "h4bcm.llid",
 			FT_UINT8, BASE_HEX, VALS(llid_codes), 0x03,
 			"Logical Link ID", HFILL }
+		},
+		{ &hf_h4bcm_llid_acl,
+			{ "LLID", "h4bcm.llid_acl",
+			FT_UINT16, BASE_HEX, VALS(llid_codes), 0x03,
+			"Logical Link ID", HFILL}
+		},
+		{ &hf_h4bcm_pldflow_acl,
+			{ "Flow", "h4bcm.flow_acl",
+			FT_BOOLEAN, 16, NULL, 0x04,
+			"Payload Flow indication", HFILL}
+		},
+		{ &hf_h4bcm_rfu,
+			{ "RFU", "h4bcm.rfu_acl",
+			FT_UINT16, BASE_HEX, 0, 0xE000,
+			"RFU", HFILL}
 		},
 		{ &hf_h4bcm_pldflow,
 			{ "Flow", "h4bcm.flow",
@@ -832,10 +1186,20 @@ proto_register_h4bcm(void)
 			FT_UINT8, BASE_DEC, NULL, 0xf8,
 			"Payload Length", HFILL }
 		},
+		{ &hf_h4bcm_length_acl,
+			{ "Length", "h4bcm.length_acl",
+			FT_UINT16, BASE_DEC, NULL, 0x1ff8,
+			"Payload Length", HFILL}
+		},
 		{ &hf_h4bcm_payload,
 			{ "Payload", "h4bcm.payload",
 			FT_BYTES, BASE_NONE, NULL, 0x0,
 			NULL, HFILL }
+		},
+		{ &hf_h4bcm_acl_fragment,
+			{ "Payload", "h4bcm.acl_fragment",
+			FT_BYTES, BASE_NONE, NULL, 0x0,
+			NULL, HFILL}
 		},
 		{ &hf_h4bcm_lm_toggle,
 			{ "LM and LM LE Logging", "h4bcm.logging",
@@ -1082,14 +1446,165 @@ proto_register_h4bcm(void)
 			FT_UINT16, BASE_HEX, NULL, 0x0,
 			"Company", HFILL }
 		},
+		{ &hf_btbbd,
+			{ "Baseband", "btbbd",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_meta,
+			{ "Meta Data", "btbbd.meta",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_clk,
+			{ "CLK", "btbbd.clk",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_channel,
+			{ "Channel", "btbbd.ch",
+			FT_UINT32, BASE_DEC, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_ptt,
+			{ "Table Type", "btbbd.ptt",
+			FT_BOOLEAN, 8, TFS(&packet_table_type_bits), 0b00000001,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_role,
+			{ "Role", "btbbd.role",
+			FT_BOOLEAN, 8, TFS(&packet_role_bits), 0b00000010,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_tx_encrypted,
+			{ "TX Enc.", "btbbd.txenc",
+			FT_BOOLEAN, 8, TFS(&lm_toggle), 0b00100000,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_rx_encrypted,
+			{ "RX Enc.", "btbbd.rxenc",
+			FT_BOOLEAN, 8, TFS(&lm_toggle), 0b01000000,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_is_eir,
+			{ "Is EIR", "btbbd.iseir",
+			FT_BOOLEAN, 8, TFS(&lm_toggle), 0b10000000,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_pkthdr,
+			{ "Packet Header", "btbbd.pkthdr",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_ltaddr,
+			{ "LT_ADDR", "btbbd.lt_addr",
+			FT_UINT16, BASE_HEX, NULL, 0x07,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_type,
+			{ "Type", "btbbd.type",
+			FT_UINT16, BASE_HEX, VALS(packet_types), 0x78,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_type_br,
+			{ "Type", "btbbd.type_br",
+			FT_UINT16, BASE_HEX, VALS(packet_types_br), 0x78,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_type_edr,
+			{ "Type", "btbbd.type_edr",
+			FT_UINT16, BASE_HEX, VALS(packet_types_edr), 0x78,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_flow,
+			{ "FLOW", "btbbd.flow",
+			FT_BOOLEAN, 16, NULL, 0x80,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_arqn,
+			{ "ARQN", "btbbd.arqn",
+			FT_BOOLEAN, 8, NULL, 0x1,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_seqn,
+			{ "SEQN", "btbbd.seqn",
+			FT_BOOLEAN, 8, NULL, 0x2,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_hec,
+			{ "HEC", "btbbd.hec",
+			FT_UINT8, BASE_HEX, NULL, 0xFC,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_fhs,
+			{ "FHS", "fhs",
+			FT_NONE, BASE_NONE, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_fhs_parity,
+			{ "Parity", "fhs.parity",
+			/* FIXME this doesn't work because bitmasks can only be 32 bits */
+			FT_UINT64, BASE_HEX, NULL, /*0x00000003ffffffffULL,*/ 0x0,
+			"LAP parity", HFILL}
+		},
+		{ &hf_btbbd_fhs_lap,
+			{ "LAP", "fhs.lap",
+			FT_UINT24, BASE_HEX, NULL, 0x03fffffc,
+			"Lower Address Part", HFILL}
+		},
+		{ &hf_btbbd_fhs_eir,
+			{ "EIR", "fhs.eir",
+			FT_BOOLEAN, 8, NULL, 0x04,
+			"Extended Inquiry Response packet may follow", HFILL}
+		},
+		{ &hf_btbbd_fhs_sr,
+			{ "SR", "fhs.sr",
+			FT_UINT8, BASE_HEX, VALS(sr_modes), 0x30,
+			"Scan Repetition", HFILL}
+		},
+		{ &hf_btbbd_fhs_uap,
+			{ "UAP", "fhs.uap",
+			FT_UINT8, BASE_HEX, NULL, 0x0,
+			"Upper Address Part", HFILL}
+		},
+		{ &hf_btbbd_fhs_nap,
+			{ "NAP", "fhs.nap",
+			FT_UINT16, BASE_HEX, NULL, 0x0,
+			"Non-Significant Address Part", HFILL}
+		},
+		{ &hf_btbbd_fhs_class, /* TODO: More options */
+			{ "Class of Device", "fhs.class",
+			FT_UINT24, BASE_HEX, NULL, 0x0,
+			NULL, HFILL}
+		},
+		{ &hf_btbbd_fhs_ltaddr,
+			{ "LT_ADDR", "fhs.lt_addr",
+			FT_UINT8, BASE_HEX, NULL, 0x07,
+			"Logical Transport Address", HFILL}
+		},
+		{ &hf_btbbd_fhs_clk,
+			{ "CLK", "fhs.clk",
+			FT_UINT32, BASE_HEX, NULL, 0x1ffffff8,
+			"Clock bits 2 through 27", HFILL}
+		},
+		{ &hf_btbbd_fhs_psmode,
+			{ "Page Scan Mode", "fhs.psmode",
+			FT_UINT8, BASE_HEX, NULL, 0xe0,
+			NULL, HFILL}
+		},
 	};
 
 	/* protocol subtree arrays */
 	static gint *ett[] = {
 		&ett_h4bcm,
 		&ett_h4bcm_pldhdr,
+		&ett_h4bcm_aclhdr,
 		&ett_h4bcm_acl_br_stats,
 		&ett_h4bcm_acl_edr_stats,
+		&ett_btbbd,
+		&ett_btbbd_meta,
+		&ett_btbbd_pkthdr,
+		&ett_btbbd_fhs,
 	};
 
 	/* register the protocol name and description */
@@ -1098,6 +1613,8 @@ proto_register_h4bcm(void)
 		"H4 Broadcom",			/* short name */
 		"h4bcm"			/* abbreviation (e.g. for filters) */
 		);
+
+	register_dissector("btacl", dissect_acl, proto_h4bcm);
 
 	/* register the header fields and subtrees used */
 	proto_register_field_array(proto_h4bcm, hf, array_length(hf));
@@ -1108,13 +1625,30 @@ void
 proto_reg_handoff_h4bcm(void)
 {
 	dissector_handle_t h4bcm_handle;
+
+    // Original InternalBlue Broadcom dissector
 	h4bcm_handle = create_dissector_handle(dissect_h4bcm, proto_h4bcm);
 
 	/* hci_h4.type == 0x07 */
 	dissector_add_uint("hci_h4.type", 0x07, h4bcm_handle);
 
+	// Bluetooth ACL Header (Payload Header)
+	h4bcm_handle = create_dissector_handle(dissect_acl, proto_h4bcm);
+	dissector_add_uint("hci_h4.type", 0x08, h4bcm_handle);
+
+	// Bluetooth Baseband (Packet Header)
+	h4bcm_handle = create_dissector_handle(dissect_bt_baseband, proto_h4bcm);
+	dissector_add_uint("hci_h4.type", 0x09, h4bcm_handle);
+
+	// PacketLogger
+	packetlogger_handle = find_dissector("packetlogger");
+	dissector_add_uint("hci_h4.type", 0x0A, packetlogger_handle);
+
 	/* LMP dissector from https://github.com/greatscottgadgets/libbtbb */
 	btlmp_handle = find_dissector("btbrlmp");
+	btl2cap_handle = find_dissector("btl2cap");
+
+	// dissector_add_uint("wtap_encap", WTAP_ENCAP_ESPRESSIF_BT, h4bcm_handle);
 }
 
 /*
